@@ -16,14 +16,13 @@ router.post('/register', async (req, res) => {
         if (existing) {
             return res.status(400).json({ message: 'Email déjà utilisé' });
         }
-
         const user = new User({ username, email, password });
         await user.save();
 
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
         res.status(201).json({ token, user: user.toJSON() });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(400).json({ message: err.message });
     }
 });
 

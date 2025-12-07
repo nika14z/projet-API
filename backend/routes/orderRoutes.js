@@ -7,7 +7,7 @@ const Book = require('../models/Book');
 // Créer une nouvelle commande (protégée)
 const auth = require('../middleware/auth');
 
-router.post('/', auth, async (req, res) => {
+router.post('/orders', auth, async (req, res) => {
     const { orderItems, shippingAddress, paymentMethod, totalPrice } = req.body;
 
     if (!orderItems || orderItems.length === 0) {

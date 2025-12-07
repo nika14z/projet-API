@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 function MyOrders() {
   const [orders, setOrders] = useState([]);
   const user = JSON.parse(localStorage.getItem('user'));
+  const userId = user ? user._id : null;
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -15,7 +16,7 @@ function MyOrders() {
         .then(res => setOrders(res.data))
         .catch(err => console.error(err));
     }
-  }, [user]);
+  }, [userId]);
 
   if (!user) {
     return <div style={{padding:'20px'}}>Veuillez vous connecter pour voir vos commandes.</div>;

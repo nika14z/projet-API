@@ -2,7 +2,59 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+/**
+ * Vérifie la complexité d'un mot de passe selon plusieurs critères.
+ * @param {string} password Le mot de passe à vérifier.
+ * @returns {object} Un objet contenant `isValid` (booléen) et `errors` (tableau de chaînes).
+ */
+function verifyPasswordComplexity(password) {
+    const minLength = 12;
+    const requiredCriteriaCount = 3;
+    const errors = [];
 
+    // Critère 1: Longueur minimale (12 caractères)
+    const hasMinLength = password.length >= minLength;
+    if (!hasMinLength) {
+        errors.push(`- Au moins ${minLength} caractères.`);
+    }
+
+    // Critère 2: Lettre majuscule
+    const hasUpperCase = /[A-Z]/.test(password);
+    if (!hasUpperCase) {
+        errors.push("- Au moins une lettre majuscule.");
+    }
+
+    // Critère 3: Lettre minuscule
+    const hasLowerCase = /[a-z]/.test(password);
+    if (!hasLowerCase) {
+        errors.push("- Au moins une lettre minuscule.");
+    }
+
+    // Critère 4: Chiffre numérique
+    const hasNumber = /[0-9]/.test(password);
+    if (!hasNumber) {
+        errors.push("- Au moins un chiffre (0-9).");
+    }
+
+    // Critère 5: Caractère spécial
+    const hasSpecialChar = /[!@#$%^&*()_+[\]{};':"\\|,.<>/?-]/.test(password);
+    if (!hasSpecialChar) {
+        errors.push("- Au moins un caractère spécial.");
+    }
+
+    // Calcul : Le mot de passe doit respecter la longueur minimale ET au moins 3 autres critères.
+    const criteria = [hasMinLength, hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar];
+    const metCriteria = criteria.filter(c => c).length;
+
+    const isValid = hasMinLength && metCriteria >= requiredCriteriaCount;
+
+    return {
+        isValid: isValid,
+        errors: isValid ? [] : errors.filter(e => !e.startsWith('- Au moins 12 caractères.') || !hasMinLength),
+        metCriteria: metCriteria,
+        requiredCriteria: requiredCriteriaCount
+    };
+}
 function Register() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -12,6 +64,13 @@ function Register() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    const complexityResult = verifyPasswordComplexity(password);
+    if (!complexityResult.isValid) {
+      let errorMessage = "Le mot de passe doit respecter les critères suivants (au moins 3 requis) : \n";
+      errorMessage += complexityResult.errors.join('\n');
+      alert(errorMessage);
+      return;
+    }
     if (!username || !email || !password) {
       alert('Veuillez remplir tous les champs');
       return;
@@ -20,7 +79,6 @@ function Register() {
       alert('Les mots de passe ne correspondent pas');
       return;
     }
-
     try {
       const res = await axios.post('http://localhost:5000/api/auth/register', { username, email, password });
       // Sauvegarde token et user

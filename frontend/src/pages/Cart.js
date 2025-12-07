@@ -59,7 +59,7 @@ function Cart({ cart, removeFromCart }) {
         totalPrice: parseFloat(totalPrice)
       };
 
-      await axios.post('http://localhost:5000/api/orders', orderData, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post('http://localhost:5000/api/orders/orders', orderData, { headers: { Authorization: `Bearer ${token}` } });
 
       alert(`Commande validée !\nLivraison à : ${finalShippingAddress.city}`);
       localStorage.removeItem('biblio-cart');

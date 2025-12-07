@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./swagger.json'); 
 const helmet = require('helmet'); // On garde Helmet (protection Headers)
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
@@ -12,6 +13,16 @@ const PORT = process.env.PORT || 5000;
 
 // --- 1. SÉCURITÉ EN-TÊTES ---
 app.use(helmet()); 
+
+// Rate limiting
+const limiter = rateLimit({
+	windowMs: 15 * 60 * 1000, // 15 minutes
+	max: 10, // Limit each IP to 100 requests per window
+	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+app.use(limiter);
 
 // --- 2. CONFIGURATION ---
 app.use(cors());
@@ -30,10 +41,12 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/biblio-poch
 const bookRoutes = require('./routes/bookRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const authRoutes = require('./routes/authRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 app.use('/api/books', bookRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/orders',orderRoutes);
 
 // --- 5. DOCUMENTATION ---
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));

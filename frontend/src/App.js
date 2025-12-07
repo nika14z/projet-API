@@ -60,7 +60,7 @@ function App() {
     window.location.href = "/"; // Redirection vers l'accueil
   };
 
-  // --- 6. AFFICHAGE (Le bout que tu as envoyé) ---
+  // --- 6. AFFICHAGE ---
   return (
     <Router>
       <div className="App">
@@ -102,7 +102,7 @@ function App() {
           <Route path="/cart" element={<Cart cart={cart} removeFromCart={removeFromCart} />} />
           <Route path="/book/:id" element={<BookDetails addToCart={addToCart} />} />
           <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/myorders" element={<MyOrders />} />
         </Routes>
       </div>
