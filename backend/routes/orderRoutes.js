@@ -15,7 +15,15 @@ router.post('/orders', auth, async (req, res) => {
     }
 
     try {
-        // 1. Création de la commande, on prend l'id depuis le token
+        // 1. Vérification des stocks AVANT de créer la commande
+        for (const item of orderItems) {
+            const book = await Book.findById(item.product);
+            if (!book || book.stock < item.qty) {
+                return res.status(400).json({ message: `Stock insuffisant pour le livre : ${book ? book.title : 'inconnu'}` });
+            }
+        }
+
+        // 2. Création de la commande, on prend l'id depuis le token
         const order = new Order({
             user: req.user.id,
             orderItems,
@@ -28,11 +36,11 @@ router.post('/orders', auth, async (req, res) => {
 
         const createdOrder = await order.save();
 
-        // 2. Mise à jour des Stocks
+        // 3. Mise à jour des Stocks
         for (const item of orderItems) {
             const book = await Book.findById(item.product);
             if (book) {
-                book.stock = Math.max(0, book.stock - item.qty);
+                book.stock -= item.qty;
                 await book.save();
             }
         }
