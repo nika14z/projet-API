@@ -9,6 +9,88 @@ const admin = require('../middleware/admin');
 const xss = require('xss');
 
 // ========================================
+// CREATION COMPTE ADMIN
+// ========================================
+
+// POST creer un compte admin (par un admin existant)
+router.post('/create-admin', admin, async (req, res) => {
+    try {
+        const { username, email, password } = req.body;
+
+        if (!username || !email || !password) {
+            return res.status(400).json({ message: 'Tous les champs sont requis' });
+        }
+
+        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email ou username deja utilise' });
+        }
+
+        const newAdmin = new User({
+            username,
+            email,
+            password,
+            role: 'admin'
+        });
+
+        await newAdmin.save();
+
+        res.status(201).json({
+            message: 'Compte admin cree avec succes',
+            user: newAdmin.toJSON()
+        });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// POST creer le premier compte admin (avec cle secrete)
+// Cette route ne necessite pas d'authentification mais requiert une cle secrete
+router.post('/setup-admin', async (req, res) => {
+    try {
+        const { username, email, password, secretKey } = req.body;
+
+        // Verifier la cle secrete (definie dans .env ou par defaut)
+        const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || 'BIBLIO_ADMIN_SECRET_2024';
+
+        if (secretKey !== ADMIN_SECRET_KEY) {
+            return res.status(403).json({ message: 'Cle secrete invalide' });
+        }
+
+        if (!username || !email || !password) {
+            return res.status(400).json({ message: 'Tous les champs sont requis' });
+        }
+
+        // Verifier s'il existe deja un admin
+        const existingAdmin = await User.findOne({ role: 'admin' });
+        if (existingAdmin) {
+            return res.status(400).json({ message: 'Un compte admin existe deja. Utilisez /api/admin/create-admin' });
+        }
+
+        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email ou username deja utilise' });
+        }
+
+        const newAdmin = new User({
+            username,
+            email,
+            password,
+            role: 'admin'
+        });
+
+        await newAdmin.save();
+
+        res.status(201).json({
+            message: 'Premier compte admin cree avec succes',
+            user: newAdmin.toJSON()
+        });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// ========================================
 // GESTION DES PRODUITS (LIVRES)
 // ========================================
 
@@ -165,10 +247,18 @@ router.put('/orders/:id', admin, async (req, res) => {
 
         const { status, isDelivered, shippingAddress } = req.body;
 
+        // Valider le statut
+        const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+        if (status && !validStatuses.includes(status)) {
+            return res.status(400).json({ message: 'Statut invalide' });
+        }
+
+        // Sauvegarder l'ancien statut avant modification (peut etre undefined pour anciennes commandes)
+        const oldStatus = order.status || 'confirmed';
+
         if (status) {
-            order.status = status;
-            // Si annulee, remettre le stock
-            if (status === 'cancelled' && order.status !== 'cancelled') {
+            // Si on annule une commande qui n'etait pas deja annulee, remettre le stock
+            if (status === 'cancelled' && oldStatus !== 'cancelled') {
                 for (const item of order.orderItems) {
                     const book = await Book.findById(item.product);
                     if (book) {
@@ -177,6 +267,7 @@ router.put('/orders/:id', admin, async (req, res) => {
                     }
                 }
             }
+            order.status = status;
         }
 
         if (isDelivered !== undefined) {
@@ -191,8 +282,15 @@ router.put('/orders/:id', admin, async (req, res) => {
         }
 
         const updatedOrder = await order.save();
-        res.json(updatedOrder);
+
+        // Recharger avec les populations
+        const populatedOrder = await Order.findById(updatedOrder._id)
+            .populate('user', 'username email')
+            .populate('payment');
+
+        res.json(populatedOrder);
     } catch (err) {
+        console.error('Erreur mise a jour commande:', err);
         res.status(400).json({ message: err.message });
     }
 });
