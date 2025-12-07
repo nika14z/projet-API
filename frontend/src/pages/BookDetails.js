@@ -9,6 +9,7 @@ function BookDetails({ addToCart, user }) { // <-- Ajout de user
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
+  const [alsoBought, setAlsoBought] = useState([]);
 
   const fetchBook = () => {
     axios.get(`http://localhost:5000/api/books/${id}`)
@@ -16,8 +17,15 @@ function BookDetails({ addToCart, user }) { // <-- Ajout de user
       .catch(err => console.error(err));
   };
 
+  const fetchAlsoBought = () => {
+    axios.get(`http://localhost:5000/api/ai/also-bought/${id}`)
+      .then(res => setAlsoBought(res.data.books || []))
+      .catch(err => console.error(err));
+  };
+
   useEffect(() => {
     fetchBook();
+    fetchAlsoBought();
   }, [id]);
 
   const submitHandler = (e) => {
@@ -88,7 +96,7 @@ function BookDetails({ addToCart, user }) { // <-- Ajout de user
         <ul style={{ listStyle: 'none', padding: '0' }}>
           {book.reviews.map(review => (
             <li key={review._id} style={{ borderBottom: '1px solid #eee', padding: '20px 0' }}>
-              <strong>{review.name}</strong>
+              <strong>{review.user ? review.user.username : review.name}</strong>
               <div>{'⭐'.repeat(review.rating)}</div>
               <p>{review.comment}</p>
             </li>
@@ -114,10 +122,10 @@ function BookDetails({ addToCart, user }) { // <-- Ajout de user
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <label>Commentaire</label>
-                <textarea 
-                  rows="4" 
-                  value={comment} 
-                  onChange={e => setComment(e.target.value)} 
+                <textarea
+                  rows="4"
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
                   style={{ width: '100%', padding: '8px' }}
                 />
               </div>
@@ -132,6 +140,48 @@ function BookDetails({ addToCart, user }) { // <-- Ajout de user
           </p>
         )}
       </div>
+
+      {/* Section Recommandations */}
+      {alsoBought.length > 0 && (
+        <div style={{ marginTop: '50px' }}>
+          <h2>Les clients ont aussi achete</h2>
+          <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
+            {alsoBought.map(rec => (
+              <Link
+                key={rec._id}
+                to={`/book/${rec._id}`}
+                style={{
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  minWidth: '150px',
+                  textAlign: 'center'
+                }}
+              >
+                <img
+                  src={rec.image}
+                  alt={rec.title}
+                  style={{
+                    width: '120px',
+                    height: '180px',
+                    objectFit: 'cover',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                />
+                <div style={{ marginTop: '10px', fontSize: '0.9rem', fontWeight: '600' }}>
+                  {rec.title.length > 25 ? rec.title.substring(0, 25) + '...' : rec.title}
+                </div>
+                <div style={{ color: '#2a9d8f', fontWeight: 'bold' }}>{rec.price} EUR</div>
+                {rec.rating > 0 && (
+                  <div style={{ fontSize: '0.8rem', color: '#f39c12' }}>
+                    {'★'.repeat(Math.round(rec.rating))} ({rec.numReviews})
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

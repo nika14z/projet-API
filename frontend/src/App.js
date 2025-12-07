@@ -9,6 +9,10 @@ import BookDetails from './pages/BookDetails';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import MyOrders from './pages/MyOrders'; // Import de la page commandes
+import Profile from './pages/Profile'; // Import de la page profil
+import Payments from './pages/Payments'; // Import de la page paiements
+import Checkout from './pages/Checkout'; // Import de la page checkout
+import Admin from './pages/Admin'; // Import de la page admin
 
 import './App.css';
 
@@ -49,6 +53,10 @@ function App() {
     setCart(cart.filter((x) => x._id !== bookId));
   };
 
+  const clearCart = () => {
+    setCart([]);
+  };
+
   // Calcul du nombre total d'articles pour le badge rouge du panier
   const totalItems = cart.reduce((acc, item) => acc + item.qty, 0);
 
@@ -78,7 +86,18 @@ function App() {
                  
                  {/* Lien vers l'historique des commandes */}
                  <Link to="/myorders" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes commandes</Link>
-                 
+
+                 {/* Lien vers le profil */}
+                 <Link to="/profile" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mon profil</Link>
+
+                 {/* Lien vers les paiements */}
+                 <Link to="/payments" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes paiements</Link>
+
+                 {/* Lien Admin (si admin) */}
+                 {user.role === 'admin' && (
+                   <Link to="/admin" style={{ color: '#ffc107', textDecoration: 'underline', fontSize: '0.9rem', fontWeight: 'bold' }}>Admin</Link>
+                 )}
+
                  {/* Bouton Déconnexion */}
                  <button onClick={logout} style={{background:'none', border:'none', color:'#ff6b6b', cursor:'pointer', fontSize: '0.9rem', textDecoration: 'underline'}}>Déconnexion</button>
                </div>
@@ -104,6 +123,10 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/myorders" element={<MyOrders />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/payments" element={<Payments />} />
+          <Route path="/checkout" element={<Checkout cart={cart} clearCart={clearCart} />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </div>
     </Router>

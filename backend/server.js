@@ -17,7 +17,7 @@ app.use(helmet());
 // Rate limiting
 const limiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
-	max: 10, // Limit each IP to 100 requests per window
+	max: 10000, // Limit each IP to 100 requests per window
 	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
@@ -42,11 +42,17 @@ const bookRoutes = require('./routes/bookRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const authRoutes = require('./routes/authRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const userRoutes = require('./routes/userRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 app.use('/api/books', bookRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/orders',orderRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 
 // --- 5. DOCUMENTATION ---
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));

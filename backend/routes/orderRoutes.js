@@ -62,4 +62,97 @@ router.get('/myorders', auth, async (req, res) => {
     }
 });
 
+// Récupérer une commande par ID
+router.get('/:id', auth, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+
+        if (!order) {
+            return res.status(404).json({ message: 'Commande introuvable' });
+        }
+
+        // Vérifier que l'utilisateur est propriétaire de la commande
+        if (order.user.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Accès non autorisé' });
+        }
+
+        res.json(order);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Mettre à jour une commande (adresse de livraison)
+router.put('/:id', auth, async (req, res) => {
+    const { shippingAddress } = req.body;
+
+    try {
+        const order = await Order.findById(req.params.id);
+
+        if (!order) {
+            return res.status(404).json({ message: 'Commande introuvable' });
+        }
+
+        // Vérifier que l'utilisateur est propriétaire de la commande
+        if (order.user.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Accès non autorisé' });
+        }
+
+        // On ne peut modifier que si la commande n'est pas encore expédiée
+        if (order.status === 'shipped' || order.status === 'delivered' || order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cette commande ne peut plus être modifiée' });
+        }
+
+        if (shippingAddress) {
+            order.shippingAddress = shippingAddress;
+        }
+
+        const updatedOrder = await order.save();
+        res.json(updatedOrder);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Annuler une commande
+router.put('/:id/cancel', auth, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+
+        if (!order) {
+            return res.status(404).json({ message: 'Commande introuvable' });
+        }
+
+        // Vérifier que l'utilisateur est propriétaire de la commande
+        if (order.user.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Accès non autorisé' });
+        }
+
+        // On ne peut annuler que si la commande n'est pas encore expédiée ou déjà annulée
+        if (order.status === 'shipped' || order.status === 'delivered') {
+            return res.status(400).json({ message: 'Cette commande ne peut plus être annulée car elle a déjà été expédiée' });
+        }
+
+        if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cette commande est déjà annulée' });
+        }
+
+        // Remettre les articles en stock
+        for (const item of order.orderItems) {
+            const book = await Book.findById(item.product);
+            if (book) {
+                book.stock += item.qty;
+                await book.save();
+            }
+        }
+
+        order.status = 'cancelled';
+        const updatedOrder = await order.save();
+
+        res.json({ message: 'Commande annulée avec succès', order: updatedOrder });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;

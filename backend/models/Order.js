@@ -31,6 +31,15 @@ const orderSchema = new mongoose.Schema({
     isPaid: { type: Boolean, required: true, default: false },
     paidAt: { type: Date },
     isDelivered: { type: Boolean, required: true, default: false }, // Pour le suivi de livraison
+    status: {
+        type: String,
+        enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'],
+        default: 'confirmed'
+    },
+    payment: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Payment'
+    },
     createdAt: { type: Date, default: Date.now }
 });
 

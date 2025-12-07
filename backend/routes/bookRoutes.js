@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
 // 2. GET /:id - Récupérer un seul livre
 router.get('/:id', async (req, res) => {
     try {
-        const book = await Book.findById(req.params.id);
+        const book = await Book.findById(req.params.id).populate('reviews.user', 'username');
         if (book == null) {
             return res.status(404).json({ message: 'Livre introuvable' });
         }
@@ -86,9 +86,12 @@ router.post('/:id/reviews', auth, async (req, res) => {
         }
 
         const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur introuvable' });
+        }
 
         const review = {
-            name: user.username,
+            name: user.username || 'Utilisateur',
             rating: Number(rating),
             comment,
             user: req.user.id,
@@ -99,7 +102,11 @@ router.post('/:id/reviews', auth, async (req, res) => {
         book.rating = book.reviews.reduce((acc, item) => item.rating + acc, 0) / book.reviews.length;
 
         await book.save();
-        res.status(201).json({ message: 'Avis ajouté' });
+        
+        // On re-popule pour avoir le nom de l'utilisateur dans la réponse
+        const populatedBook = await Book.findById(req.params.id).populate('reviews.user', 'username');
+        
+        res.status(201).json(populatedBook);
     } catch (err) {
         res.status(500).json({ message: 'Erreur serveur: ' + err.message });
     }

@@ -17,14 +17,19 @@ function Cart({ cart, removeFromCart }) {
   const getRecommendations = async () => {
     try {
       const categories = cart.map(b => b.category).filter(Boolean);
-      const res = await axios.post('http://localhost:5000/api/ai/recommend', { categoriesInCart: categories });
+      const bookIds = cart.map(b => b._id || b.id).filter(Boolean);
+      const res = await axios.post('http://localhost:5000/api/ai/recommend', {
+        categoriesInCart: categories,
+        bookIdsInCart: bookIds,
+        userId: user?._id || user?.id
+      });
       setRecommendations(res.data || []);
     } catch (err) {
       console.error('Erreur recommandations', err);
     }
   };
 
-  const checkoutHandler = async () => {
+  const checkoutHandler = () => {
     if (!user || !token) {
       alert('Veuillez vous connecter pour passer commande !');
       navigate('/login');
@@ -36,38 +41,8 @@ function Cart({ cart, removeFromCart }) {
       return;
     }
 
-    try {
-      const finalShippingAddress = selectedStore ? {
-        address: selectedStore.address,
-        city: `Point Retrait - ${selectedStore.name}`,
-        postalCode: '99999',
-        country: 'France'
-      } : {
-        address: '123 Rue de la Tech', city: 'Paris', postalCode: '75001', country: 'France'
-      };
-
-      const orderData = {
-        orderItems: cart.map(item => ({
-          product: item._id || item.id,
-          title: item.title,
-          image: item.image,
-          price: item.price,
-          qty: item.qty
-        })),
-        shippingAddress: finalShippingAddress,
-        paymentMethod: 'Carte Bancaire',
-        totalPrice: parseFloat(totalPrice)
-      };
-
-      await axios.post('http://localhost:5000/api/orders/orders', orderData, { headers: { Authorization: `Bearer ${token}` } });
-
-      alert(`Commande validée !\nLivraison à : ${finalShippingAddress.city}`);
-      localStorage.removeItem('biblio-cart');
-      window.location.href = '/';
-    } catch (err) {
-      console.error(err);
-      alert('Erreur lors de la commande : ' + (err.response?.data?.message || err.message));
-    }
+    // Rediriger vers la page de checkout
+    navigate('/checkout');
   };
 
   return (
