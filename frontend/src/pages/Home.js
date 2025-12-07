@@ -74,7 +74,7 @@ function Home({ addToCart }) {
                 <span style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{book.price} €</span>
                 <span style={{ fontSize: '0.8rem', background: '#eee', padding: '2px 6px', borderRadius: '4px' }}>{book.category}</span>
               </div>
-              
+              <p style={{ fontSize: '0.9rem', color: '#777', marginTop: '5px' }}>Stock: {book.stock}</p>
               <button 
                 onClick={() => addToCart(book)}
                 style={{ width: '100%', marginTop: '15px', padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
