@@ -100,7 +100,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home addToCart={addToCart} />} />
           <Route path="/cart" element={<Cart cart={cart} removeFromCart={removeFromCart} />} />
-          <Route path="/book/:id" element={<BookDetails addToCart={addToCart} />} />
+          <Route path="/book/:id" element={<BookDetails addToCart={addToCart} user={user} />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/myorders" element={<MyOrders />} />

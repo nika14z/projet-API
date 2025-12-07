@@ -64,4 +64,46 @@ router.post('/', async (req, res) => {
     }
 });
 
+// 4. POST /:id/reviews - Ajouter un avis
+const auth = require('../middleware/auth');
+const User = require('../models/User');
+
+router.post('/:id/reviews', auth, async (req, res) => {
+    const { rating, comment } = req.body;
+
+    try {
+        const book = await Book.findById(req.params.id);
+        if (!book) {
+            return res.status(404).json({ message: 'Livre introuvable' });
+        }
+
+        const alreadyReviewed = book.reviews.find(
+            (r) => r.user.toString() === req.user.id.toString()
+        );
+
+        if (alreadyReviewed) {
+            return res.status(400).json({ message: 'Vous avez déjà commenté ce livre' });
+        }
+
+        const user = await User.findById(req.user.id);
+
+        const review = {
+            name: user.username,
+            rating: Number(rating),
+            comment,
+            user: req.user.id,
+        };
+
+        book.reviews.push(review);
+        book.numReviews = book.reviews.length;
+        book.rating = book.reviews.reduce((acc, item) => item.rating + acc, 0) / book.reviews.length;
+
+        await book.save();
+        res.status(201).json({ message: 'Avis ajouté' });
+    } catch (err) {
+        res.status(500).json({ message: 'Erreur serveur: ' + err.message });
+    }
+});
+
+
 module.exports = router;
