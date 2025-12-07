@@ -82,20 +82,20 @@ function App() {
              {/* MENU UTILISATEUR (Conditionnel) */}
              {user ? (
                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                 <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Bonjour, {user.username}</span>
-                 
-                 {/* Lien vers l'historique des commandes */}
-                 <Link to="/myorders" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes commandes</Link>
+                 <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Bonjour, {user.username} {user.role === 'admin' && <span style={{ color: '#ffc107' }}>(Admin)</span>}</span>
 
-                 {/* Lien vers le profil */}
-                 <Link to="/profile" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mon profil</Link>
-
-                 {/* Lien vers les paiements */}
-                 <Link to="/payments" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes paiements</Link>
+                 {/* Menus pour utilisateurs normaux uniquement */}
+                 {user.role !== 'admin' && (
+                   <>
+                     <Link to="/myorders" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes commandes</Link>
+                     <Link to="/profile" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mon profil</Link>
+                     <Link to="/payments" style={{ color: 'white', textDecoration: 'underline', fontSize: '0.9rem' }}>Mes paiements</Link>
+                   </>
+                 )}
 
                  {/* Lien Admin (si admin) */}
                  {user.role === 'admin' && (
-                   <Link to="/admin" style={{ color: '#ffc107', textDecoration: 'underline', fontSize: '0.9rem', fontWeight: 'bold' }}>Admin</Link>
+                   <Link to="/admin" style={{ color: '#ffc107', textDecoration: 'underline', fontSize: '0.9rem', fontWeight: 'bold' }}>Tableau de bord</Link>
                  )}
 
                  {/* Bouton Déconnexion */}
@@ -109,24 +109,26 @@ function App() {
              )}
           </div>
 
-          {/* Lien Panier avec compteur */}
-          <Link to="/cart" style={{ color: 'white', textDecoration: 'none', background: '#007bff', padding: '10px 20px', borderRadius: '20px' }}>
-            🛒 <span style={{ fontWeight: 'bold' }}>{totalItems}</span>
-          </Link>
+          {/* Lien Panier avec compteur (masque pour admin) */}
+          {(!user || user.role !== 'admin') && (
+            <Link to="/cart" style={{ color: 'white', textDecoration: 'none', background: '#007bff', padding: '10px 20px', borderRadius: '20px' }}>
+              🛒 <span style={{ fontWeight: 'bold' }}>{totalItems}</span>
+            </Link>
+          )}
         </nav>
 
         {/* DÉFINITION DES ROUTES (PAGES) */}
         <Routes>
-          <Route path="/" element={<Home addToCart={addToCart} />} />
-          <Route path="/cart" element={<Cart cart={cart} removeFromCart={removeFromCart} />} />
-          <Route path="/book/:id" element={<BookDetails addToCart={addToCart} user={user} />} />
+          <Route path="/" element={user?.role === 'admin' ? <Admin /> : <Home addToCart={addToCart} />} />
+          <Route path="/cart" element={user?.role !== 'admin' ? <Cart cart={cart} removeFromCart={removeFromCart} /> : <Admin />} />
+          <Route path="/book/:id" element={user?.role !== 'admin' ? <BookDetails addToCart={addToCart} user={user} /> : <Admin />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/myorders" element={<MyOrders />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/checkout" element={<Checkout cart={cart} clearCart={clearCart} />} />
-          <Route path="/admin" element={<Admin />} />
+          <Route path="/myorders" element={user?.role !== 'admin' ? <MyOrders /> : <div style={{padding: '40px', textAlign: 'center'}}><h2>Acces reserve aux utilisateurs</h2></div>} />
+          <Route path="/profile" element={user?.role !== 'admin' ? <Profile /> : <div style={{padding: '40px', textAlign: 'center'}}><h2>Acces reserve aux utilisateurs</h2></div>} />
+          <Route path="/payments" element={user?.role !== 'admin' ? <Payments /> : <div style={{padding: '40px', textAlign: 'center'}}><h2>Acces reserve aux utilisateurs</h2></div>} />
+          <Route path="/checkout" element={user?.role !== 'admin' ? <Checkout cart={cart} clearCart={clearCart} /> : <div style={{padding: '40px', textAlign: 'center'}}><h2>Acces reserve aux utilisateurs</h2></div>} />
+          <Route path="/admin" element={user && user.role === 'admin' ? <Admin /> : <div style={{padding: '40px', textAlign: 'center'}}><h2>Acces refuse</h2><p>Vous devez etre administrateur pour acceder a cette page.</p></div>} />
         </Routes>
       </div>
     </Router>

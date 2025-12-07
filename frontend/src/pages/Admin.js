@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom';
 
 function Admin() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user'));
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const token = localStorage.getItem('token');
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -26,21 +28,32 @@ function Admin() {
 
   const apiConfig = { headers: { Authorization: `Bearer ${token}` } };
 
-  // Verifier si admin
+  // Verifier si admin au chargement
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
-      navigate('/');
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      if (parsedUser.role === 'admin') {
+        setIsAdmin(true);
+      } else {
+        navigate('/');
+      }
+    } else {
+      navigate('/login');
     }
-  }, [user, navigate]);
+    setCheckingAuth(false);
+  }, [navigate]);
 
-  // Charger les donnees selon l'onglet
+  // Charger les donnees selon l'onglet (seulement si admin)
   useEffect(() => {
+    if (!isAdmin) return;
     if (activeTab === 'dashboard') fetchStats();
     if (activeTab === 'books') fetchBooks();
     if (activeTab === 'orders') fetchOrders();
     if (activeTab === 'payments') fetchPayments();
     if (activeTab === 'users') fetchUsers();
-  }, [activeTab]);
+  }, [activeTab, isAdmin]);
 
   const fetchStats = async () => {
     try {
@@ -178,8 +191,14 @@ function Admin() {
     }
   };
 
-  if (!user || user.role !== 'admin') {
-    return <div style={styles.container}>Acces refuse</div>;
+  // Afficher un loader pendant la verification
+  if (checkingAuth) {
+    return <div style={styles.container}>Verification des droits...</div>;
+  }
+
+  // Bloquer l'acces si non admin
+  if (!isAdmin) {
+    return <div style={styles.container}>Acces refuse. Vous devez etre administrateur.</div>;
   }
 
   return (
