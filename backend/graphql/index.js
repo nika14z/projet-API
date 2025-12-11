@@ -1,8 +1,7 @@
 // backend/graphql/index.js
-// Configuration du serveur GraphQL avec Apollo
+// Configuration du serveur GraphQL avec Apollo Server Express
 
-const { ApolloServer } = require('@apollo/server');
-const { expressMiddleware } = require('@apollo/server/express4');
+const { ApolloServer } = require('apollo-server-express');
 const jwt = require('jsonwebtoken');
 
 const typeDefs = require('./schema');
@@ -26,10 +25,16 @@ const getUser = (token) => {
 };
 
 // Fonction pour creer et demarrer le serveur Apollo
-async function createApolloServer() {
+async function createApolloServer(app) {
     const server = new ApolloServer({
         typeDefs,
         resolvers,
+        context: ({ req }) => {
+            // Extraire le token du header Authorization
+            const token = req.headers.authorization || '';
+            const user = getUser(token);
+            return { user };
+        },
         // Formater les erreurs pour plus de clarte
         formatError: (error) => {
             console.error('GraphQL Error:', error.message);
@@ -43,21 +48,10 @@ async function createApolloServer() {
     // Demarrer le serveur Apollo
     await server.start();
 
+    // Appliquer le middleware à Express
+    server.applyMiddleware({ app, path: '/graphql' });
+
     return server;
 }
 
-// Middleware Express pour GraphQL
-function createGraphQLMiddleware(server) {
-    return expressMiddleware(server, {
-        context: async ({ req }) => {
-            // Extraire le token du header Authorization
-            const token = req.headers.authorization || '';
-            const user = getUser(token);
-
-            // Retourner le contexte avec l'utilisateur (ou null si non connecte)
-            return { user };
-        }
-    });
-}
-
-module.exports = { createApolloServer, createGraphQLMiddleware };
+module.exports = { createApolloServer };

@@ -1,7 +1,9 @@
 // backend/graphql/schema.js
 // Definition du schema GraphQL (types, queries, mutations)
 
-const typeDefs = `#graphql
+const { gql } = require('apollo-server-express');
+
+const typeDefs = gql`
 
     # ==================== TYPES ====================
 

@@ -1,37 +1,1409 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.0.3",
   "info": {
     "title": "API Biblio Poche",
     "version": "1.0.0",
-    "description": "Documentation de l'API pour le projet Biblio Poche"
+    "description": "API REST complète pour la librairie en ligne Biblio Poche. Cette API permet de gérer les livres, les utilisateurs, les commandes, les paiements et inclut un moteur de recommandation IA.",
+    "contact": {
+      "name": "Équipe Biblio Poche",
+      "email": "contact@biblio-poche.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
   },
   "servers": [
     {
       "url": "http://localhost:5000",
       "description": "Serveur de développement"
+    },
+    {
+      "url": "https://api.biblio-poche.com",
+      "description": "Serveur de production"
     }
   ],
+  "tags": [
+    { "name": "Auth", "description": "Authentification et inscription" },
+    { "name": "Books", "description": "Gestion des livres (catalogue)" },
+    { "name": "Orders", "description": "Gestion des commandes" },
+    { "name": "Payments", "description": "Gestion des paiements" },
+    { "name": "Users", "description": "Gestion du profil utilisateur" },
+    { "name": "Admin", "description": "Routes d'administration (nécessite rôle admin)" },
+    { "name": "AI", "description": "Moteur de recommandation IA" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT obtenu après connexion. Format: Bearer <token>"
+      }
+    },
+    "schemas": {
+      "Book": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "507f1f77bcf86cd799439011" },
+          "title": { "type": "string", "example": "Le Seigneur des Anneaux" },
+          "author": { "type": "string", "example": "J.R.R. Tolkien" },
+          "price": { "type": "number", "format": "float", "example": 24.99 },
+          "category": { "type": "string", "example": "Fantasy" },
+          "description": { "type": "string", "example": "Une épopée fantastique..." },
+          "image": { "type": "string", "example": "https://example.com/image.jpg" },
+          "stock": { "type": "integer", "example": 50 },
+          "rating": { "type": "number", "format": "float", "example": 4.5 },
+          "numReviews": { "type": "integer", "example": 120 },
+          "reviews": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Review" }
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Review": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "user": { "type": "string", "description": "ID de l'utilisateur" },
+          "name": { "type": "string", "example": "Jean Dupont" },
+          "rating": { "type": "integer", "minimum": 1, "maximum": 5, "example": 4 },
+          "comment": { "type": "string", "example": "Excellent livre !" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "username": { "type": "string", "example": "jean_dupont" },
+          "email": { "type": "string", "format": "email", "example": "jean@example.com" },
+          "role": { "type": "string", "enum": ["user", "admin"], "example": "user" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "user": { "type": "string", "description": "ID de l'utilisateur" },
+          "orderItems": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/OrderItem" }
+          },
+          "shippingAddress": { "$ref": "#/components/schemas/ShippingAddress" },
+          "paymentMethod": { "type": "string", "example": "card" },
+          "totalPrice": { "type": "number", "format": "float", "example": 49.98 },
+          "isPaid": { "type": "boolean", "example": true },
+          "paidAt": { "type": "string", "format": "date-time" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"],
+            "example": "confirmed"
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "properties": {
+          "product": { "type": "string", "description": "ID du livre" },
+          "title": { "type": "string", "example": "Le Seigneur des Anneaux" },
+          "qty": { "type": "integer", "example": 2 },
+          "image": { "type": "string" },
+          "price": { "type": "number", "format": "float", "example": 24.99 }
+        },
+        "required": ["product", "title", "qty", "price"]
+      },
+      "ShippingAddress": {
+        "type": "object",
+        "properties": {
+          "address": { "type": "string", "example": "123 Rue de Paris" },
+          "city": { "type": "string", "example": "Paris" },
+          "postalCode": { "type": "string", "example": "75001" },
+          "country": { "type": "string", "example": "France" }
+        },
+        "required": ["address", "city", "postalCode", "country"]
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "user": { "type": "string" },
+          "order": { "type": "string" },
+          "amount": { "type": "number", "format": "float", "example": 49.98 },
+          "paymentMethod": { "type": "string", "example": "card" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "completed", "failed", "refunded", "partially_refunded"],
+            "example": "completed"
+          },
+          "transactionId": { "type": "string" },
+          "cardLast4": { "type": "string", "example": "4242" },
+          "refundedAmount": { "type": "number", "format": "float", "default": 0 },
+          "refundReason": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "description": "JWT token pour l'authentification" },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "example": "Une erreur est survenue" }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "currentPage": { "type": "integer", "example": 1 },
+              "totalPages": { "type": "integer", "example": 5 },
+              "totalItems": { "type": "integer", "example": 100 }
+            }
+          }
+        }
+      },
+      "AdminStats": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalBooks": { "type": "integer", "example": 150 },
+              "totalOrders": { "type": "integer", "example": 500 },
+              "totalUsers": { "type": "integer", "example": 200 },
+              "totalPayments": { "type": "integer", "example": 450 },
+              "totalRevenue": { "type": "number", "format": "float", "example": 15000.50 },
+              "recentOrders": { "type": "integer", "example": 25 },
+              "outOfStock": { "type": "integer", "example": 3 }
+            }
+          },
+          "ordersByStatus": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": { "type": "string", "example": "confirmed" },
+                "count": { "type": "integer", "example": 150 }
+              }
+            }
+          },
+          "topBooks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "_id": { "type": "string" },
+                "title": { "type": "string" },
+                "totalSold": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "paths": {
-    "/api/books": {
-      "get": {
-        "summary": "Récupérer la liste des livres",
-        "description": "Retourne un tableau contenant tous les livres disponibles.",
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Inscription d'un nouvel utilisateur",
+        "description": "Crée un nouveau compte utilisateur et retourne un token JWT.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password"],
+                "properties": {
+                  "username": { "type": "string", "minLength": 3, "example": "jean_dupont" },
+                  "email": { "type": "string", "format": "email", "example": "jean@example.com" },
+                  "password": { "type": "string", "minLength": 6, "example": "motdepasse123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Inscription réussie",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Données invalides ou email déjà utilisé",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Connexion utilisateur",
+        "description": "Authentifie un utilisateur et retourne un token JWT valide 7 jours.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "jean@example.com" },
+                  "password": { "type": "string", "example": "motdepasse123" }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Succès",
+            "description": "Connexion réussie",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Identifiants invalides",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Liste des livres",
+        "description": "Récupère tous les livres disponibles, avec possibilité de filtrer par catégorie.",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filtrer par catégorie",
+            "schema": { "type": "string", "example": "Fantasy" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des livres",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "title": { "type": "string" },
-                      "author": { "type": "string" },
-                      "price": { "type": "number" }
+                  "items": { "$ref": "#/components/schemas/Book" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Books"],
+        "summary": "Ajouter un livre",
+        "description": "Ajoute un nouveau livre au catalogue. Les champs texte sont nettoyés contre les attaques XSS.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "author", "price", "category"],
+                "properties": {
+                  "title": { "type": "string", "example": "Dune" },
+                  "author": { "type": "string", "example": "Frank Herbert" },
+                  "price": { "type": "number", "example": 19.99 },
+                  "category": { "type": "string", "example": "Science-Fiction" },
+                  "description": { "type": "string", "example": "Un classique de la SF..." },
+                  "image": { "type": "string", "example": "https://example.com/dune.jpg" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Livre créé avec succès",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Book" }
+              }
+            }
+          },
+          "400": {
+            "description": "Données invalides",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/{id}": {
+      "get": {
+        "tags": ["Books"],
+        "summary": "Détails d'un livre",
+        "description": "Récupère les détails complets d'un livre, y compris ses avis.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID du livre",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails du livre",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Book" }
+              }
+            }
+          },
+          "404": {
+            "description": "Livre introuvable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/{id}/reviews": {
+      "post": {
+        "tags": ["Books"],
+        "summary": "Ajouter un avis",
+        "description": "Ajoute un avis sur un livre. Un utilisateur ne peut laisser qu'un seul avis par livre.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID du livre",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rating", "comment"],
+                "properties": {
+                  "rating": { "type": "integer", "minimum": 1, "maximum": 5, "example": 5 },
+                  "comment": { "type": "string", "example": "Un chef-d'œuvre absolu !" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Avis ajouté avec succès",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Book" }
+              }
+            }
+          },
+          "400": {
+            "description": "Vous avez déjà commenté ce livre",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "Non authentifié"
+          }
+        }
+      }
+    },
+    "/api/orders/orders": {
+      "post": {
+        "tags": ["Orders"],
+        "summary": "Créer une commande",
+        "description": "Crée une nouvelle commande. Vérifie les stocks avant création et les met à jour après.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderItems", "shippingAddress", "totalPrice"],
+                "properties": {
+                  "orderItems": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/OrderItem" }
+                  },
+                  "shippingAddress": { "$ref": "#/components/schemas/ShippingAddress" },
+                  "paymentMethod": { "type": "string", "default": "card" },
+                  "totalPrice": { "type": "number", "format": "float" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Commande créée avec succès",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Order" }
+              }
+            }
+          },
+          "400": {
+            "description": "Stock insuffisant ou données invalides"
+          },
+          "401": {
+            "description": "Non authentifié"
+          }
+        }
+      }
+    },
+    "/api/orders/myorders": {
+      "get": {
+        "tags": ["Orders"],
+        "summary": "Mes commandes",
+        "description": "Récupère l'historique des commandes de l'utilisateur connecté.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Liste des commandes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Order" }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Non authentifié"
+          }
+        }
+      }
+    },
+    "/api/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "summary": "Détails d'une commande",
+        "description": "Récupère les détails d'une commande. L'utilisateur doit être propriétaire de la commande.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID de la commande",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails de la commande",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Order" }
+              }
+            }
+          },
+          "403": {
+            "description": "Accès non autorisé"
+          },
+          "404": {
+            "description": "Commande introuvable"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Orders"],
+        "summary": "Modifier l'adresse de livraison",
+        "description": "Modifie l'adresse de livraison d'une commande. Impossible si la commande est déjà expédiée.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "shippingAddress": { "$ref": "#/components/schemas/ShippingAddress" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Commande mise à jour"
+          },
+          "400": {
+            "description": "Commande ne peut plus être modifiée"
+          }
+        }
+      }
+    },
+    "/api/orders/{id}/cancel": {
+      "put": {
+        "tags": ["Orders"],
+        "summary": "Annuler une commande",
+        "description": "Annule une commande et remet les articles en stock. Impossible si la commande est déjà expédiée.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commande annulée avec succès",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "order": { "$ref": "#/components/schemas/Order" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Commande ne peut plus être annulée"
+          }
+        }
+      }
+    },
+    "/api/payments": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Mes paiements",
+        "description": "Récupère l'historique des paiements de l'utilisateur connecté.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Liste des paiements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Payment" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Payments"],
+        "summary": "Créer un paiement",
+        "description": "Crée un paiement pour une commande. Simule le traitement du paiement.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId"],
+                "properties": {
+                  "orderId": { "type": "string", "description": "ID de la commande" },
+                  "paymentMethod": { "type": "string", "default": "card" },
+                  "cardLast4": { "type": "string", "example": "4242" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Paiement créé avec succès",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Payment" }
+              }
+            }
+          },
+          "400": {
+            "description": "Commande déjà payée"
+          },
+          "404": {
+            "description": "Commande introuvable"
+          }
+        }
+      }
+    },
+    "/api/payments/stats/summary": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Résumé des paiements",
+        "description": "Récupère un résumé statistique des paiements de l'utilisateur.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Résumé des paiements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalPayments": { "type": "integer" },
+                    "totalSpent": { "type": "number", "format": "float" },
+                    "completedPayments": { "type": "integer" },
+                    "refundedPayments": { "type": "integer" },
+                    "pendingPayments": { "type": "integer" },
+                    "totalRefunded": { "type": "number", "format": "float" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Détails d'un paiement",
+        "description": "Récupère les détails d'un paiement par son ID.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails du paiement",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Payment" }
+              }
+            }
+          },
+          "404": {
+            "description": "Paiement introuvable"
+          }
+        }
+      }
+    },
+    "/api/payments/transaction/{transactionId}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Paiement par transaction ID",
+        "description": "Récupère un paiement par son identifiant de transaction.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "transactionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails du paiement"
+          },
+          "404": {
+            "description": "Transaction introuvable"
+          }
+        }
+      }
+    },
+    "/api/payments/{id}/refund": {
+      "post": {
+        "tags": ["Payments"],
+        "summary": "Demander un remboursement",
+        "description": "Demande un remboursement total ou partiel pour un paiement complété.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": { "type": "number", "description": "Montant à rembourser (optionnel, total si non spécifié)" },
+                  "reason": { "type": "string", "example": "Produit non conforme" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Remboursement effectué",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "payment": { "$ref": "#/components/schemas/Payment" },
+                    "refundedAmount": { "type": "number" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Paiement ne peut pas être remboursé"
+          }
+        }
+      }
+    },
+    "/api/users/profile": {
+      "put": {
+        "tags": ["Users"],
+        "summary": "Modifier mon profil",
+        "description": "Met à jour les informations du profil de l'utilisateur connecté.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": { "type": "string", "example": "nouveau_pseudo" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "minLength": 6, "description": "Nouveau mot de passe (optionnel)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profil mis à jour",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "400": {
+            "description": "Email ou username déjà utilisé"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Supprimer mon compte",
+        "description": "Supprime définitivement le compte de l'utilisateur connecté.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Compte supprimé",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Compte supprimé avec succès" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/recommend": {
+      "post": {
+        "tags": ["AI"],
+        "summary": "Recommandations basées sur le panier",
+        "description": "Génère des recommandations de livres basées sur les catégories du panier et l'historique d'achat.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "categoriesInCart": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "example": ["Fantasy", "Science-Fiction"]
+                  },
+                  "bookIdsInCart": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "IDs des livres déjà dans le panier (à exclure)"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "description": "ID de l'utilisateur pour personnalisation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Livres recommandés",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Book" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/personalized": {
+      "get": {
+        "tags": ["AI"],
+        "summary": "Recommandations personnalisées",
+        "description": "Génère des recommandations basées sur l'historique complet d'achat de l'utilisateur.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Recommandations personnalisées",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string", "enum": ["personalized", "best-sellers"] },
+                    "message": { "type": "string" },
+                    "preferences": {
+                      "type": "object",
+                      "properties": {
+                        "categories": { "type": "array", "items": { "type": "string" } },
+                        "authors": { "type": "array", "items": { "type": "string" } }
+                      }
+                    },
+                    "books": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Book" }
                     }
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/also-bought/{bookId}": {
+      "get": {
+        "tags": ["AI"],
+        "summary": "Les clients ont aussi acheté",
+        "description": "Retourne les livres fréquemment achetés avec le livre spécifié.",
+        "parameters": [
+          {
+            "name": "bookId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Livres souvent achetés ensemble",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "books": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Book" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/trending": {
+      "get": {
+        "tags": ["AI"],
+        "summary": "Livres tendance",
+        "description": "Retourne les livres les plus commandés ces 30 derniers jours.",
+        "responses": {
+          "200": {
+            "description": "Livres tendance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string", "example": "Tendances du moment" },
+                    "books": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Book" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/setup-admin": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Créer le premier admin",
+        "description": "Crée le premier compte administrateur. Nécessite une clé secrète. Cette route n'est disponible que s'il n'existe aucun admin.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password", "secretKey"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" },
+                  "secretKey": { "type": "string", "description": "Clé secrète définie dans ADMIN_SECRET_KEY" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Admin créé avec succès"
+          },
+          "400": {
+            "description": "Un admin existe déjà"
+          },
+          "403": {
+            "description": "Clé secrète invalide"
+          }
+        }
+      }
+    },
+    "/api/admin/create-admin": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Créer un nouvel admin",
+        "description": "Crée un nouveau compte administrateur. Réservé aux admins existants.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "email", "password"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Admin créé"
+          },
+          "401": {
+            "description": "Non authentifié ou non admin"
+          }
+        }
+      }
+    },
+    "/api/admin/books": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Liste des livres (admin)",
+        "description": "Récupère tous les livres avec pagination.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste paginée des livres",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/PaginatedResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "books": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Book" }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Ajouter un livre (admin)",
+        "description": "Ajoute un nouveau livre au catalogue avec protection XSS.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "author", "price", "category"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "author": { "type": "string" },
+                  "price": { "type": "number" },
+                  "category": { "type": "string" },
+                  "description": { "type": "string" },
+                  "image": { "type": "string" },
+                  "stock": { "type": "integer", "default": 10 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Livre créé"
+          }
+        }
+      }
+    },
+    "/api/admin/books/{id}": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Modifier un livre",
+        "description": "Modifie les informations d'un livre existant.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "author": { "type": "string" },
+                  "price": { "type": "number" },
+                  "category": { "type": "string" },
+                  "description": { "type": "string" },
+                  "image": { "type": "string" },
+                  "stock": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Livre modifié"
+          },
+          "404": {
+            "description": "Livre introuvable"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Supprimer un livre",
+        "description": "Supprime définitivement un livre du catalogue.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Livre supprimé"
+          },
+          "404": {
+            "description": "Livre introuvable"
+          }
+        }
+      }
+    },
+    "/api/admin/orders": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Toutes les commandes",
+        "description": "Récupère toutes les commandes avec pagination et filtrage par statut.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste paginée des commandes"
+          }
+        }
+      }
+    },
+    "/api/admin/orders/{id}": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Détails d'une commande (admin)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails de la commande"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Modifier une commande",
+        "description": "Modifie le statut ou l'adresse de livraison d'une commande.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pending", "confirmed", "shipped", "delivered", "cancelled"] },
+                  "isDelivered": { "type": "boolean" },
+                  "shippingAddress": { "$ref": "#/components/schemas/ShippingAddress" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Commande modifiée"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Supprimer une commande",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Commande supprimée"
+          }
+        }
+      }
+    },
+    "/api/admin/payments": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Tous les paiements",
+        "description": "Récupère tous les paiements avec pagination.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des paiements"
+          }
+        }
+      }
+    },
+    "/api/admin/payments/{id}": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Détails d'un paiement (admin)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Détails du paiement"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Modifier un paiement (remboursement)",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string" },
+                  "refundedAmount": { "type": "number" },
+                  "refundReason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Paiement modifié"
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Liste des utilisateurs",
+        "description": "Récupère tous les utilisateurs avec pagination.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste des utilisateurs"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/role": {
+      "put": {
+        "tags": ["Admin"],
+        "summary": "Modifier le rôle d'un utilisateur",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["role"],
+                "properties": {
+                  "role": { "type": "string", "enum": ["user", "admin"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rôle modifié"
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Supprimer un utilisateur",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Utilisateur supprimé"
+          },
+          "400": {
+            "description": "Vous ne pouvez pas supprimer votre propre compte"
+          }
+        }
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Statistiques du dashboard",
+        "description": "Récupère les statistiques globales : revenus, commandes, utilisateurs, top livres, etc.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Statistiques du dashboard",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdminStats" }
               }
             }
           }

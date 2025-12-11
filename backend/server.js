@@ -9,7 +9,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 // Import GraphQL
-const { createApolloServer, createGraphQLMiddleware } = require('./graphql');
+const { createApolloServer } = require('./graphql');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,17 +67,14 @@ app.get('/', (req, res) => {
 // --- 6. GRAPHQL ---
 // Fonction async pour demarrer le serveur avec GraphQL
 async function startServer() {
-    // Creer le serveur Apollo
-    const apolloServer = await createApolloServer();
-
-    // Monter le middleware GraphQL sur /graphql
-    app.use('/graphql', express.json(), createGraphQLMiddleware(apolloServer));
+    // Creer et appliquer le serveur Apollo à Express
+    const apolloServer = await createApolloServer(app);
 
     // Demarrer le serveur Express
     app.listen(PORT, () => {
         console.log(`Serveur demarre sur le port ${PORT}`);
         console.log(`REST API: http://localhost:${PORT}/api`);
-        console.log(`GraphQL:  http://localhost:${PORT}/graphql`);
+        console.log(`GraphQL:  http://localhost:${PORT}${apolloServer.graphqlPath}`);
         console.log(`Swagger:  http://localhost:${PORT}/api-docs`);
     });
 }
