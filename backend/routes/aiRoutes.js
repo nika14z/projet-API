@@ -365,7 +365,7 @@ router.get('/trending', async (req, res) => {
             });
         }
 
-        // Si pas assez de donnees, completer avec les mieux notes
+        // Si pas assez de donnees, completer avec les meilleures notes
         if (trending.length < 5) {
             const topRated = await Book.find({
                 _id: { $nin: trending.map(t => t._id) },

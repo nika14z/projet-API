@@ -3,10 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json'); 
+const swaggerDocument = require('./swagger.json');
 const helmet = require('helmet'); // On garde Helmet (protection Headers)
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+
+// Import GraphQL
+const { createApolloServer, createGraphQLMiddleware } = require('./graphql');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,7 +20,7 @@ app.use(helmet());
 // Rate limiting
 const limiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
-	max: 10000, // Limit each IP to 100 requests per window
+	max: 1000, // Limit each IP to 100 requests per window
 	standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
 	legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
@@ -58,9 +61,26 @@ app.use('/api/admin', adminRoutes);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.get('/', (req, res) => {
-    res.send('API Biblio Poche en ligne 🛡️');
+    res.send('API Biblio Poche en ligne - REST + GraphQL');
 });
 
-app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
-});
+// --- 6. GRAPHQL ---
+// Fonction async pour demarrer le serveur avec GraphQL
+async function startServer() {
+    // Creer le serveur Apollo
+    const apolloServer = await createApolloServer();
+
+    // Monter le middleware GraphQL sur /graphql
+    app.use('/graphql', express.json(), createGraphQLMiddleware(apolloServer));
+
+    // Demarrer le serveur Express
+    app.listen(PORT, () => {
+        console.log(`Serveur demarre sur le port ${PORT}`);
+        console.log(`REST API: http://localhost:${PORT}/api`);
+        console.log(`GraphQL:  http://localhost:${PORT}/graphql`);
+        console.log(`Swagger:  http://localhost:${PORT}/api-docs`);
+    });
+}
+
+// Demarrer le serveur
+startServer().catch(console.error);

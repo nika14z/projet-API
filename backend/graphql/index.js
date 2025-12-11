@@ -1,0 +1,63 @@
+// backend/graphql/index.js
+// Configuration du serveur GraphQL avec Apollo
+
+const { ApolloServer } = require('@apollo/server');
+const { expressMiddleware } = require('@apollo/server/express4');
+const jwt = require('jsonwebtoken');
+
+const typeDefs = require('./schema');
+const resolvers = require('./resolvers');
+
+// Fonction pour extraire l'utilisateur du token JWT
+const getUser = (token) => {
+    if (!token) return null;
+
+    try {
+        // Retirer "Bearer " si present
+        if (token.startsWith('Bearer ')) {
+            token = token.slice(7);
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+        return { id: decoded.id, role: decoded.role };
+    } catch (error) {
+        return null;
+    }
+};
+
+// Fonction pour creer et demarrer le serveur Apollo
+async function createApolloServer() {
+    const server = new ApolloServer({
+        typeDefs,
+        resolvers,
+        // Formater les erreurs pour plus de clarte
+        formatError: (error) => {
+            console.error('GraphQL Error:', error.message);
+            return {
+                message: error.message,
+                path: error.path
+            };
+        }
+    });
+
+    // Demarrer le serveur Apollo
+    await server.start();
+
+    return server;
+}
+
+// Middleware Express pour GraphQL
+function createGraphQLMiddleware(server) {
+    return expressMiddleware(server, {
+        context: async ({ req }) => {
+            // Extraire le token du header Authorization
+            const token = req.headers.authorization || '';
+            const user = getUser(token);
+
+            // Retourner le contexte avec l'utilisateur (ou null si non connecte)
+            return { user };
+        }
+    });
+}
+
+module.exports = { createApolloServer, createGraphQLMiddleware };
