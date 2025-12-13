@@ -28,6 +28,7 @@ async function checkReachable() {
 async function checkSecurityHeaders() {
   process.stdout.write('2) Vérification des en-têtes de sécurité (Helmet/CSP)... ');
   try {
+    
     const res = await axios.get(BASE, { timeout: TIMEOUT });
     const h = res.headers;
     const checks = [

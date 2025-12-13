@@ -5,25 +5,32 @@ const Book = require('../models/Book');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const xss = require('xss');
+const { sanitize } = require('../utils/sanitize');
+const {
+    generateToken,
+    ERRORS,
+    isOwnerOrAdmin,
+    checkStockAvailability,
+    decrementStock,
+    incrementStock,
+    canCancelOrder,
+    canModifyOrder
+} = require('../utils/helpers');
 
 // ==================== HELPERS ====================
 
-// Fonction pour verifier l'authentification
 const checkAuth = (context) => {
     if (!context.user) {
-        throw new Error('Non authentifie. Veuillez vous connecter.');
+        throw new Error(ERRORS.NOT_AUTHENTICATED);
     }
     return context.user;
 };
 
-// Fonction pour verifier si admin
 const checkAdmin = (context) => {
     const user = checkAuth(context);
     if (user.role !== 'admin') {
-        throw new Error('Acces refuse. Droits administrateur requis.');
+        throw new Error(ERRORS.ADMIN_REQUIRED);
     }
     return user;
 };
@@ -34,8 +41,6 @@ const resolvers = {
     // ==================== QUERIES ====================
     Query: {
         // ----- BOOKS -----
-
-        // Recuperer tous les livres
         books: async (_, { category }) => {
             try {
                 let filter = {};
@@ -48,12 +53,11 @@ const resolvers = {
             }
         },
 
-        // Recuperer un livre par ID
         book: async (_, { id }) => {
             try {
                 const book = await Book.findById(id).populate('reviews.user', 'username');
                 if (!book) {
-                    throw new Error('Livre non trouve');
+                    throw new Error(ERRORS.BOOK_NOT_FOUND);
                 }
                 return book;
             } catch (error) {
@@ -61,7 +65,6 @@ const resolvers = {
             }
         },
 
-        // Rechercher des livres
         searchBooks: async (_, { query }) => {
             try {
                 return await Book.find({
@@ -76,76 +79,67 @@ const resolvers = {
         },
 
         // ----- USERS -----
-
-        // Utilisateur connecte
         me: async (_, __, context) => {
             const user = checkAuth(context);
             return await User.findById(user.id);
         },
 
-        // Tous les utilisateurs (admin)
         users: async (_, __, context) => {
             checkAdmin(context);
             return await User.find().select('-password');
         },
 
         // ----- ORDERS -----
-
-        // Mes commandes
         myOrders: async (_, __, context) => {
             const user = checkAuth(context);
             return await Order.find({ user: user.id }).sort({ createdAt: -1 });
         },
 
-        // Une commande par ID
         order: async (_, { id }, context) => {
             const user = checkAuth(context);
             const order = await Order.findById(id);
 
             if (!order) {
-                throw new Error('Commande non trouvee');
+                throw new Error(ERRORS.ORDER_NOT_FOUND);
             }
 
-            // Verifier que c'est la commande de l'utilisateur ou admin
-            if (order.user.toString() !== user.id && user.role !== 'admin') {
-                throw new Error('Acces refuse');
+            if (!isOwnerOrAdmin(order.user, user.id, user.role)) {
+                throw new Error(ERRORS.ACCESS_DENIED);
             }
 
             return order;
         },
 
-        // Toutes les commandes (admin)
         allOrders: async (_, __, context) => {
             checkAdmin(context);
             return await Order.find().populate('user', 'username email').sort({ createdAt: -1 });
         },
 
         // ----- PAYMENTS -----
-
-        // Mes paiements
         myPayments: async (_, __, context) => {
             const user = checkAuth(context);
             return await Payment.find({ user: user.id }).populate('order').sort({ createdAt: -1 });
         },
 
         // ----- ADMIN -----
-
-        // Statistiques
         adminStats: async (_, __, context) => {
             checkAdmin(context);
 
-            const [totalBooks, totalUsers, totalOrders, payments, outOfStock, recentOrders] = await Promise.all([
+            const [totalBooks, totalUsers, totalOrders, outOfStock, recentOrders] = await Promise.all([
                 Book.countDocuments(),
                 User.countDocuments(),
                 Order.countDocuments(),
-                Payment.find({ status: 'completed' }),
                 Book.countDocuments({ stock: 0 }),
                 Order.countDocuments({
                     createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
                 })
             ]);
 
-            const totalRevenue = payments.reduce((acc, p) => acc + p.amount, 0);
+            let totalRevenue = 0;
+            if (totalOrders > 0) {
+                const payments = await Payment.find({ status: 'completed' });
+                totalRevenue = payments.reduce((acc, p) => acc + p.amount, 0);
+            }
 
             return {
                 totalBooks,
@@ -161,79 +155,55 @@ const resolvers = {
     // ==================== MUTATIONS ====================
     Mutation: {
         // ----- AUTH -----
-
-        // Inscription
         register: async (_, { input }) => {
             const { username, email, password } = input;
 
-            // Verification des champs
             if (!username || !email || !password) {
-                throw new Error('Tous les champs sont requis');
+                throw new Error(ERRORS.MISSING_FIELDS);
             }
 
-            // Verifier si l'email existe deja
             const existingUser = await User.findOne({ email });
             if (existingUser) {
-                throw new Error('Cet email est deja utilise');
+                throw new Error(ERRORS.EMAIL_EXISTS);
             }
 
-            // Creer l'utilisateur
             const user = new User({ username, email, password });
             await user.save();
 
-            // Generer le token
-            const token = jwt.sign(
-                { id: user._id, role: user.role },
-                process.env.JWT_SECRET || 'secret',
-                { expiresIn: '7d' }
-            );
-
+            const token = generateToken(user);
             return { token, user };
         },
 
-        // Connexion
         login: async (_, { email, password }) => {
-            // Verifier les champs
             if (!email || !password) {
-                throw new Error('Email et mot de passe requis');
+                throw new Error(ERRORS.MISSING_FIELDS);
             }
 
-            // Trouver l'utilisateur
             const user = await User.findOne({ email });
             if (!user) {
-                throw new Error('Identifiants invalides');
+                throw new Error(ERRORS.INVALID_CREDENTIALS);
             }
 
-            // Verifier le mot de passe
             const isMatch = await user.comparePassword(password);
             if (!isMatch) {
-                throw new Error('Identifiants invalides');
+                throw new Error(ERRORS.INVALID_CREDENTIALS);
             }
 
-            // Generer le token
-            const token = jwt.sign(
-                { id: user._id, role: user.role },
-                process.env.JWT_SECRET || 'secret',
-                { expiresIn: '7d' }
-            );
-
+            const token = generateToken(user);
             return { token, user };
         },
 
         // ----- BOOKS -----
-
-        // Creer un livre (admin)
         createBook: async (_, { input }, context) => {
             checkAdmin(context);
 
-            // Nettoyer les entrees (protection XSS)
             const cleanInput = {
-                title: xss(input.title),
-                author: xss(input.author),
+                title: sanitize(input.title),
+                author: sanitize(input.author),
                 price: input.price,
-                category: xss(input.category),
-                description: input.description ? xss(input.description) : '',
-                image: input.image ? xss(input.image) : '',
+                category: sanitize(input.category),
+                description: input.description ? sanitize(input.description) : '',
+                image: input.image ? sanitize(input.image) : '',
                 stock: input.stock || 10
             };
 
@@ -241,48 +211,43 @@ const resolvers = {
             return await book.save();
         },
 
-        // Modifier un livre (admin)
         updateBook: async (_, { id, input }, context) => {
             checkAdmin(context);
 
-            // Nettoyer les entrees
             const cleanInput = {};
-            if (input.title) cleanInput.title = xss(input.title);
-            if (input.author) cleanInput.author = xss(input.author);
+            if (input.title) cleanInput.title = sanitize(input.title);
+            if (input.author) cleanInput.author = sanitize(input.author);
             if (input.price !== undefined) cleanInput.price = input.price;
-            if (input.category) cleanInput.category = xss(input.category);
-            if (input.description) cleanInput.description = xss(input.description);
-            if (input.image) cleanInput.image = xss(input.image);
+            if (input.category) cleanInput.category = sanitize(input.category);
+            if (input.description) cleanInput.description = sanitize(input.description);
+            if (input.image) cleanInput.image = sanitize(input.image);
             if (input.stock !== undefined) cleanInput.stock = input.stock;
 
             const book = await Book.findByIdAndUpdate(id, cleanInput, { new: true });
             if (!book) {
-                throw new Error('Livre non trouve');
+                throw new Error(ERRORS.BOOK_NOT_FOUND);
             }
             return book;
         },
 
-        // Supprimer un livre (admin)
         deleteBook: async (_, { id }, context) => {
             checkAdmin(context);
 
             const book = await Book.findByIdAndDelete(id);
             if (!book) {
-                throw new Error('Livre non trouve');
+                throw new Error(ERRORS.BOOK_NOT_FOUND);
             }
             return true;
         },
 
-        // Ajouter un avis
         addReview: async (_, { bookId, input }, context) => {
             const user = checkAuth(context);
 
             const book = await Book.findById(bookId);
             if (!book) {
-                throw new Error('Livre non trouve');
+                throw new Error(ERRORS.BOOK_NOT_FOUND);
             }
 
-            // Verifier si l'utilisateur a deja commente
             const alreadyReviewed = book.reviews.find(
                 r => r.user.toString() === user.id
             );
@@ -294,9 +259,9 @@ const resolvers = {
 
             const review = {
                 user: user.id,
-                name: userData.username,
+                name: sanitize(userData.username),
                 rating: input.rating,
-                comment: xss(input.comment)
+                comment: sanitize(input.comment)
             };
 
             book.reviews.push(review);
@@ -308,8 +273,6 @@ const resolvers = {
         },
 
         // ----- ORDERS -----
-
-        // Creer une commande
         createOrder: async (_, { input }, context) => {
             const user = checkAuth(context);
 
@@ -319,21 +282,13 @@ const resolvers = {
                 throw new Error('Pas d\'articles dans la commande');
             }
 
-            // Verifier les stocks
-            for (const item of orderItems) {
-                const book = await Book.findById(item.product);
-                if (!book) {
-                    throw new Error(`Livre non trouve: ${item.product}`);
-                }
-                if (book.stock < item.qty) {
-                    throw new Error(`Stock insuffisant pour: ${book.title}`);
-                }
+            const stockCheck = await checkStockAvailability(orderItems);
+            if (!stockCheck.success) {
+                throw new Error(stockCheck.error);
             }
 
-            // Calculer le total
             const totalPrice = orderItems.reduce((acc, item) => acc + item.price * item.qty, 0);
 
-            // Creer la commande
             const order = new Order({
                 user: user.id,
                 orderItems,
@@ -344,40 +299,28 @@ const resolvers = {
             });
 
             await order.save();
-
-            // Mettre a jour les stocks
-            for (const item of orderItems) {
-                await Book.findByIdAndUpdate(item.product, {
-                    $inc: { stock: -item.qty }
-                });
-            }
+            await decrementStock(orderItems);
 
             return order;
         },
 
-        // Annuler une commande
         cancelOrder: async (_, { id }, context) => {
             const user = checkAuth(context);
 
             const order = await Order.findById(id);
             if (!order) {
-                throw new Error('Commande non trouvee');
+                throw new Error(ERRORS.ORDER_NOT_FOUND);
             }
 
-            if (order.user.toString() !== user.id && user.role !== 'admin') {
-                throw new Error('Acces refuse');
+            if (!isOwnerOrAdmin(order.user, user.id, user.role)) {
+                throw new Error(ERRORS.ACCESS_DENIED);
             }
 
-            if (['shipped', 'delivered'].includes(order.status)) {
-                throw new Error('Impossible d\'annuler une commande expediee ou livree');
+            if (!canCancelOrder(order.status)) {
+                throw new Error(ERRORS.ORDER_CANNOT_CANCEL);
             }
 
-            // Remettre les articles en stock
-            for (const item of order.orderItems) {
-                await Book.findByIdAndUpdate(item.product, {
-                    $inc: { stock: item.qty }
-                });
-            }
+            await incrementStock(order.orderItems);
 
             order.status = 'cancelled';
             await order.save();
@@ -385,21 +328,20 @@ const resolvers = {
             return order;
         },
 
-        // Modifier l'adresse
         updateOrderAddress: async (_, { id, shippingAddress }, context) => {
             const user = checkAuth(context);
 
             const order = await Order.findById(id);
             if (!order) {
-                throw new Error('Commande non trouvee');
+                throw new Error(ERRORS.ORDER_NOT_FOUND);
             }
 
-            if (order.user.toString() !== user.id) {
-                throw new Error('Acces refuse');
+            if (!isOwnerOrAdmin(order.user, user.id, null)) {
+                throw new Error(ERRORS.ACCESS_DENIED);
             }
 
-            if (['shipped', 'delivered', 'cancelled'].includes(order.status)) {
-                throw new Error('Impossible de modifier cette commande');
+            if (!canModifyOrder(order.status)) {
+                throw new Error(ERRORS.ORDER_CANNOT_MODIFY);
             }
 
             order.shippingAddress = shippingAddress;
@@ -409,8 +351,6 @@ const resolvers = {
         },
 
         // ----- USER -----
-
-        // Modifier profil
         updateProfile: async (_, { username, email, password }, context) => {
             const user = checkAuth(context);
 
@@ -426,7 +366,6 @@ const resolvers = {
             return updatedUser;
         },
 
-        // Supprimer compte
         deleteAccount: async (_, __, context) => {
             const user = checkAuth(context);
             await User.findByIdAndDelete(user.id);
@@ -435,8 +374,6 @@ const resolvers = {
     },
 
     // ==================== TYPE RESOLVERS ====================
-    // (pour resoudre les relations entre types)
-
     Book: {
         id: (book) => book._id.toString(),
         reviews: (book) => book.reviews || []

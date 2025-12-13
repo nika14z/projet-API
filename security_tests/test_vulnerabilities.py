@@ -20,7 +20,7 @@ Usage:
     python test_vulnerabilities.py
 
 Auteur: Equipe Biblio Poche
-Date: 2024
+Date: 2025
 =============================================================================
 """
 
@@ -38,8 +38,8 @@ from datetime import datetime
 BASE_URL = "http://localhost:5000"
 
 # Credentials de test (un compte existant)
-TEST_EMAIL = "test@example.com"
-TEST_PASSWORD = "password123"
+TEST_EMAIL = "kamalpapaye@gmail.com"
+TEST_PASSWORD = ")bRBQS53E3t+4#b"
 
 # Couleurs pour l'affichage (fonctionne sur Windows/Linux/Mac)
 try:

@@ -1,25 +1,20 @@
 // backend/middleware/admin.js
-const jwt = require('jsonwebtoken');
+const { extractAndVerifyToken, ERRORS } = require('../utils/helpers');
 
 function adminMiddleware(req, res, next) {
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Non autorise, token manquant' });
+    const user = extractAndVerifyToken(authHeader);
+
+    if (!user) {
+        return res.status(401).json({ message: ERRORS.TOKEN_MISSING });
     }
 
-    const token = authHeader.split(' ')[1];
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-
-        if (decoded.role !== 'admin') {
-            return res.status(403).json({ message: 'Acces refuse. Droits administrateur requis.' });
-        }
-
-        req.user = { id: decoded.id, role: decoded.role };
-        next();
-    } catch (err) {
-        return res.status(401).json({ message: 'Token invalide' });
+    if (user.role !== 'admin') {
+        return res.status(403).json({ message: ERRORS.ADMIN_REQUIRED });
     }
+
+    req.user = user;
+    next();
 }
 
 module.exports = adminMiddleware;

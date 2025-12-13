@@ -2,57 +2,55 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
-const Book = require('../models/Book');
-
-// Créer une nouvelle commande (protégée)
 const auth = require('../middleware/auth');
+const {
+    ERRORS,
+    isOwner,
+    checkStockAvailability,
+    decrementStock,
+    incrementStock,
+    canModifyOrder,
+    canCancelOrder
+} = require('../utils/helpers');
 
+// POST /api/orders - Creer une nouvelle commande
 router.post('/orders', auth, async (req, res) => {
     const { orderItems, shippingAddress, paymentMethod, totalPrice } = req.body;
 
     if (!orderItems || orderItems.length === 0) {
-        return res.status(400).json({ message: 'Aucun article commandé' });
+        return res.status(400).json({ message: 'Aucun article commande' });
     }
 
     try {
-        // 1. Vérification des stocks AVANT de créer la commande
-        for (const item of orderItems) {
-            const book = await Book.findById(item.product);
-            if (!book || book.stock < item.qty) {
-                return res.status(400).json({ message: `Stock insuffisant pour le livre : ${book ? book.title : 'inconnu'}` });
-            }
+        // 1. Verification des stocks
+        const stockCheck = await checkStockAvailability(orderItems);
+        if (!stockCheck.success) {
+            return res.status(400).json({ message: stockCheck.error });
         }
 
-        // 2. Création de la commande, on prend l'id depuis le token
+        // 2. Creation de la commande
         const order = new Order({
             user: req.user.id,
             orderItems,
             shippingAddress,
             paymentMethod,
             totalPrice,
-            isPaid: true, // Simulation de paiement
+            isPaid: true,
             paidAt: Date.now()
         });
 
         const createdOrder = await order.save();
 
-        // 3. Mise à jour des Stocks
-        for (const item of orderItems) {
-            const book = await Book.findById(item.product);
-            if (book) {
-                book.stock -= item.qty;
-                await book.save();
-            }
-        }
+        // 3. Mise a jour des stocks
+        await decrementStock(orderItems);
 
         res.status(201).json(createdOrder);
     } catch (err) {
-        res.status(500).json({ message: "Erreur création commande: " + err.message });
+        res.status(500).json({ message: 'Erreur creation commande: ' + err.message });
     }
 });
 
-// Récupérer les commandes d'un utilisateur (Historique)
-// Récupérer les commandes de l'utilisateur connecté (protégé)
+// GET /api/orders/myorders - Recuperer les commandes de l'utilisateur
 router.get('/myorders', auth, async (req, res) => {
     try {
         const orders = await Order.find({ user: req.user.id });
@@ -62,18 +60,17 @@ router.get('/myorders', auth, async (req, res) => {
     }
 });
 
-// Récupérer une commande par ID
+// GET /api/orders/:id - Recuperer une commande par ID
 router.get('/:id', auth, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
 
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire de la commande
-        if (order.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(order.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
         res.json(order);
@@ -82,7 +79,7 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// Mettre à jour une commande (adresse de livraison)
+// PUT /api/orders/:id - Modifier une commande (adresse de livraison)
 router.put('/:id', auth, async (req, res) => {
     const { shippingAddress } = req.body;
 
@@ -90,17 +87,15 @@ router.put('/:id', auth, async (req, res) => {
         const order = await Order.findById(req.params.id);
 
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire de la commande
-        if (order.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(order.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
-        // On ne peut modifier que si la commande n'est pas encore expédiée
-        if (order.status === 'shipped' || order.status === 'delivered' || order.status === 'cancelled') {
-            return res.status(400).json({ message: 'Cette commande ne peut plus être modifiée' });
+        if (!canModifyOrder(order.status)) {
+            return res.status(400).json({ message: ERRORS.ORDER_CANNOT_MODIFY });
         }
 
         if (shippingAddress) {
@@ -114,42 +109,34 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// Annuler une commande
+// PUT /api/orders/:id/cancel - Annuler une commande
 router.put('/:id/cancel', auth, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
 
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire de la commande
-        if (order.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(order.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
-        // On ne peut annuler que si la commande n'est pas encore expédiée ou déjà annulée
-        if (order.status === 'shipped' || order.status === 'delivered') {
-            return res.status(400).json({ message: 'Cette commande ne peut plus être annulée car elle a déjà été expédiée' });
+        if (!canCancelOrder(order.status)) {
+            return res.status(400).json({ message: ERRORS.ORDER_CANNOT_CANCEL });
         }
 
         if (order.status === 'cancelled') {
-            return res.status(400).json({ message: 'Cette commande est déjà annulée' });
+            return res.status(400).json({ message: ERRORS.ORDER_ALREADY_CANCELLED });
         }
 
         // Remettre les articles en stock
-        for (const item of order.orderItems) {
-            const book = await Book.findById(item.product);
-            if (book) {
-                book.stock += item.qty;
-                await book.save();
-            }
-        }
+        await incrementStock(order.orderItems);
 
         order.status = 'cancelled';
         const updatedOrder = await order.save();
 
-        res.json({ message: 'Commande annulée avec succès', order: updatedOrder });
+        res.json({ message: 'Commande annulee avec succes', order: updatedOrder });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }

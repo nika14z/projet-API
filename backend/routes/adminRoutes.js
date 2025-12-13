@@ -6,33 +6,32 @@ const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const User = require('../models/User');
 const admin = require('../middleware/admin');
-const xss = require('xss');
+const { sanitize } = require('../utils/sanitize');
+const {
+    ERRORS,
+    incrementStock,
+    isValidOrderStatus
+} = require('../utils/helpers');
 
 // ========================================
 // CREATION COMPTE ADMIN
 // ========================================
 
-// POST creer un compte admin (par un admin existant)
+// POST /api/admin/create-admin - Creer un compte admin (par un admin existant)
 router.post('/create-admin', admin, async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
         if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Tous les champs sont requis' });
+            return res.status(400).json({ message: ERRORS.MISSING_FIELDS });
         }
 
         const existingUser = await User.findOne({ $or: [{ email }, { username }] });
         if (existingUser) {
-            return res.status(400).json({ message: 'Email ou username deja utilise' });
+            return res.status(400).json({ message: ERRORS.EMAIL_EXISTS });
         }
 
-        const newAdmin = new User({
-            username,
-            email,
-            password,
-            role: 'admin'
-        });
-
+        const newAdmin = new User({ username, email, password, role: 'admin' });
         await newAdmin.save();
 
         res.status(201).json({
@@ -44,13 +43,11 @@ router.post('/create-admin', admin, async (req, res) => {
     }
 });
 
-// POST creer le premier compte admin (avec cle secrete)
-// Cette route ne necessite pas d'authentification mais requiert une cle secrete
+// POST /api/admin/setup-admin - Creer le premier compte admin (avec cle secrete)
 router.post('/setup-admin', async (req, res) => {
     try {
         const { username, email, password, secretKey } = req.body;
 
-        // Verifier la cle secrete (definie dans .env ou par defaut)
         const ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || 'BIBLIO_ADMIN_SECRET_2024';
 
         if (secretKey !== ADMIN_SECRET_KEY) {
@@ -58,10 +55,9 @@ router.post('/setup-admin', async (req, res) => {
         }
 
         if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Tous les champs sont requis' });
+            return res.status(400).json({ message: ERRORS.MISSING_FIELDS });
         }
 
-        // Verifier s'il existe deja un admin
         const existingAdmin = await User.findOne({ role: 'admin' });
         if (existingAdmin) {
             return res.status(400).json({ message: 'Un compte admin existe deja. Utilisez /api/admin/create-admin' });
@@ -69,16 +65,10 @@ router.post('/setup-admin', async (req, res) => {
 
         const existingUser = await User.findOne({ $or: [{ email }, { username }] });
         if (existingUser) {
-            return res.status(400).json({ message: 'Email ou username deja utilise' });
+            return res.status(400).json({ message: ERRORS.EMAIL_EXISTS });
         }
 
-        const newAdmin = new User({
-            username,
-            email,
-            password,
-            role: 'admin'
-        });
-
+        const newAdmin = new User({ username, email, password, role: 'admin' });
         await newAdmin.save();
 
         res.status(201).json({
@@ -94,7 +84,7 @@ router.post('/setup-admin', async (req, res) => {
 // GESTION DES PRODUITS (LIVRES)
 // ========================================
 
-// GET tous les livres (avec pagination)
+// GET /api/admin/books - Tous les livres (avec pagination)
 router.get('/books', admin, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -120,18 +110,18 @@ router.get('/books', admin, async (req, res) => {
     }
 });
 
-// POST ajouter un livre
+// POST /api/admin/books - Ajouter un livre
 router.post('/books', admin, async (req, res) => {
     try {
         const { title, author, price, category, description, image, stock } = req.body;
 
         const book = new Book({
-            title: xss(title),
-            author: xss(author),
+            title: sanitize(title),
+            author: sanitize(author),
             price,
-            category: xss(category),
-            description: xss(description || ''),
-            image: xss(image || ''),
+            category: sanitize(category),
+            description: sanitize(description || ''),
+            image: sanitize(image || ''),
             stock: stock || 10
         });
 
@@ -142,22 +132,22 @@ router.post('/books', admin, async (req, res) => {
     }
 });
 
-// PUT modifier un livre
+// PUT /api/admin/books/:id - Modifier un livre
 router.put('/books/:id', admin, async (req, res) => {
     try {
         const book = await Book.findById(req.params.id);
         if (!book) {
-            return res.status(404).json({ message: 'Livre introuvable' });
+            return res.status(404).json({ message: ERRORS.BOOK_NOT_FOUND });
         }
 
         const { title, author, price, category, description, image, stock } = req.body;
 
-        if (title) book.title = xss(title);
-        if (author) book.author = xss(author);
+        if (title) book.title = sanitize(title);
+        if (author) book.author = sanitize(author);
         if (price !== undefined) book.price = price;
-        if (category) book.category = xss(category);
-        if (description !== undefined) book.description = xss(description);
-        if (image !== undefined) book.image = xss(image);
+        if (category) book.category = sanitize(category);
+        if (description !== undefined) book.description = sanitize(description);
+        if (image !== undefined) book.image = sanitize(image);
         if (stock !== undefined) book.stock = stock;
 
         const updatedBook = await book.save();
@@ -167,12 +157,12 @@ router.put('/books/:id', admin, async (req, res) => {
     }
 });
 
-// DELETE supprimer un livre
+// DELETE /api/admin/books/:id - Supprimer un livre
 router.delete('/books/:id', admin, async (req, res) => {
     try {
         const book = await Book.findById(req.params.id);
         if (!book) {
-            return res.status(404).json({ message: 'Livre introuvable' });
+            return res.status(404).json({ message: ERRORS.BOOK_NOT_FOUND });
         }
 
         await Book.findByIdAndDelete(req.params.id);
@@ -186,7 +176,7 @@ router.delete('/books/:id', admin, async (req, res) => {
 // GESTION DES COMMANDES
 // ========================================
 
-// GET toutes les commandes (avec pagination et filtres)
+// GET /api/admin/orders - Toutes les commandes (avec pagination et filtres)
 router.get('/orders', admin, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -220,7 +210,7 @@ router.get('/orders', admin, async (req, res) => {
     }
 });
 
-// GET une commande par ID
+// GET /api/admin/orders/:id - Une commande par ID
 router.get('/orders/:id', admin, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id)
@@ -228,7 +218,7 @@ router.get('/orders/:id', admin, async (req, res) => {
             .populate('payment');
 
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
         res.json(order);
@@ -237,35 +227,25 @@ router.get('/orders/:id', admin, async (req, res) => {
     }
 });
 
-// PUT modifier une commande (statut, livraison)
+// PUT /api/admin/orders/:id - Modifier une commande (statut, livraison)
 router.put('/orders/:id', admin, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
         const { status, isDelivered, shippingAddress } = req.body;
 
-        // Valider le statut
-        const validStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
-        if (status && !validStatuses.includes(status)) {
+        if (status && !isValidOrderStatus(status)) {
             return res.status(400).json({ message: 'Statut invalide' });
         }
 
-        // Sauvegarder l'ancien statut avant modification (peut etre undefined pour anciennes commandes)
         const oldStatus = order.status || 'confirmed';
 
         if (status) {
-            // Si on annule une commande qui n'etait pas deja annulee, remettre le stock
             if (status === 'cancelled' && oldStatus !== 'cancelled') {
-                for (const item of order.orderItems) {
-                    const book = await Book.findById(item.product);
-                    if (book) {
-                        book.stock += item.qty;
-                        await book.save();
-                    }
-                }
+                await incrementStock(order.orderItems);
             }
             order.status = status;
         }
@@ -283,35 +263,26 @@ router.put('/orders/:id', admin, async (req, res) => {
 
         const updatedOrder = await order.save();
 
-        // Recharger avec les populations
         const populatedOrder = await Order.findById(updatedOrder._id)
             .populate('user', 'username email')
             .populate('payment');
 
         res.json(populatedOrder);
     } catch (err) {
-        console.error('Erreur mise a jour commande:', err);
         res.status(400).json({ message: err.message });
     }
 });
 
-// DELETE supprimer une commande
+// DELETE /api/admin/orders/:id - Supprimer une commande
 router.delete('/orders/:id', admin, async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
-        // Remettre le stock si la commande n'etait pas annulee
         if (order.status !== 'cancelled') {
-            for (const item of order.orderItems) {
-                const book = await Book.findById(item.product);
-                if (book) {
-                    book.stock += item.qty;
-                    await book.save();
-                }
-            }
+            await incrementStock(order.orderItems);
         }
 
         await Order.findByIdAndDelete(req.params.id);
@@ -325,7 +296,7 @@ router.delete('/orders/:id', admin, async (req, res) => {
 // GESTION DES PAIEMENTS
 // ========================================
 
-// GET tous les paiements (avec pagination et filtres)
+// GET /api/admin/payments - Tous les paiements
 router.get('/payments', admin, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -359,7 +330,7 @@ router.get('/payments', admin, async (req, res) => {
     }
 });
 
-// GET un paiement par ID
+// GET /api/admin/payments/:id - Un paiement par ID
 router.get('/payments/:id', admin, async (req, res) => {
     try {
         const payment = await Payment.findById(req.params.id)
@@ -367,7 +338,7 @@ router.get('/payments/:id', admin, async (req, res) => {
             .populate('order');
 
         if (!payment) {
-            return res.status(404).json({ message: 'Paiement introuvable' });
+            return res.status(404).json({ message: ERRORS.PAYMENT_NOT_FOUND });
         }
 
         res.json(payment);
@@ -376,12 +347,12 @@ router.get('/payments/:id', admin, async (req, res) => {
     }
 });
 
-// PUT modifier un paiement (remboursement admin)
+// PUT /api/admin/payments/:id - Modifier un paiement (remboursement admin)
 router.put('/payments/:id', admin, async (req, res) => {
     try {
         const payment = await Payment.findById(req.params.id);
         if (!payment) {
-            return res.status(404).json({ message: 'Paiement introuvable' });
+            return res.status(404).json({ message: ERRORS.PAYMENT_NOT_FOUND });
         }
 
         const { status, refundedAmount, refundReason } = req.body;
@@ -390,7 +361,6 @@ router.put('/payments/:id', admin, async (req, res) => {
         if (refundedAmount !== undefined) payment.refundedAmount = refundedAmount;
         if (refundReason) payment.refundReason = refundReason;
 
-        // Si rembourse completement, mettre a jour la commande
         if (status === 'refunded') {
             const order = await Order.findById(payment.order);
             if (order) {
@@ -411,7 +381,7 @@ router.put('/payments/:id', admin, async (req, res) => {
 // GESTION DES UTILISATEURS
 // ========================================
 
-// GET tous les utilisateurs
+// GET /api/admin/users - Tous les utilisateurs
 router.get('/users', admin, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -438,12 +408,12 @@ router.get('/users', admin, async (req, res) => {
     }
 });
 
-// PUT modifier le role d'un utilisateur
+// PUT /api/admin/users/:id/role - Modifier le role d'un utilisateur
 router.put('/users/:id/role', admin, async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) {
-            return res.status(404).json({ message: 'Utilisateur introuvable' });
+            return res.status(404).json({ message: ERRORS.USER_NOT_FOUND });
         }
 
         const { role } = req.body;
@@ -460,15 +430,14 @@ router.put('/users/:id/role', admin, async (req, res) => {
     }
 });
 
-// DELETE supprimer un utilisateur
+// DELETE /api/admin/users/:id - Supprimer un utilisateur
 router.delete('/users/:id', admin, async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) {
-            return res.status(404).json({ message: 'Utilisateur introuvable' });
+            return res.status(404).json({ message: ERRORS.USER_NOT_FOUND });
         }
 
-        // Empecher la suppression de son propre compte admin
         if (user._id.toString() === req.user.id) {
             return res.status(400).json({ message: 'Vous ne pouvez pas supprimer votre propre compte' });
         }
@@ -496,12 +465,15 @@ router.get('/stats', admin, async (req, res) => {
             { $group: { _id: '$status', count: { $sum: 1 } } }
         ]);
 
-        // Revenus totaux
-        const revenueResult = await Payment.aggregate([
-            { $match: { status: { $in: ['completed', 'partially_refunded'] } } },
-            { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$refundedAmount'] } } } }
-        ]);
-        const totalRevenue = revenueResult[0]?.total || 0;
+        // Revenus totaux - SEULEMENT si il y a des commandes
+        let totalRevenue = 0;
+        if (totalOrders > 0) {
+            const revenueResult = await Payment.aggregate([
+                { $match: { status: { $in: ['completed', 'partially_refunded'] } } },
+                { $group: { _id: null, total: { $sum: { $subtract: ['$amount', '$refundedAmount'] } } } }
+            ]);
+            totalRevenue = revenueResult[0]?.total || 0;
+        }
 
         // Commandes recentes (7 derniers jours)
         const sevenDaysAgo = new Date();
@@ -511,13 +483,16 @@ router.get('/stats', admin, async (req, res) => {
         // Livres en rupture de stock
         const outOfStock = await Book.countDocuments({ stock: 0 });
 
-        // Top 5 des livres les plus vendus
-        const topBooks = await Order.aggregate([
-            { $unwind: '$orderItems' },
-            { $group: { _id: '$orderItems.product', totalSold: { $sum: '$orderItems.qty' }, title: { $first: '$orderItems.title' } } },
-            { $sort: { totalSold: -1 } },
-            { $limit: 5 }
-        ]);
+        // Top 5 des livres les plus vendus - SEULEMENT si il y a des commandes
+        let topBooks = [];
+        if (totalOrders > 0) {
+            topBooks = await Order.aggregate([
+                { $unwind: '$orderItems' },
+                { $group: { _id: '$orderItems.product', totalSold: { $sum: '$orderItems.qty' }, title: { $first: '$orderItems.title' } } },
+                { $sort: { totalSold: -1 } },
+                { $limit: 5 }
+            ]);
+        }
 
         res.json({
             summary: {

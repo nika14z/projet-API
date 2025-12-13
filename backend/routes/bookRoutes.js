@@ -2,13 +2,16 @@
 const express = require('express');
 const router = express.Router();
 const Book = require('../models/Book');
-const xss = require('xss'); // <--- 1. IMPORT DE LA SÉCURITÉ
+const User = require('../models/User');
+const auth = require('../middleware/auth');
+const { sanitize } = require('../utils/sanitize');
+const { ERRORS } = require('../utils/helpers');
 
-// 1. GET - Récupérer tous les livres (avec filtre optionnel)
+// GET /api/books - Recuperer tous les livres
 router.get('/', async (req, res) => {
     try {
-        const { category } = req.query; 
-        
+        const { category } = req.query;
+
         let filter = {};
         if (category && category !== 'Tous') {
             filter = { category: category };
@@ -21,12 +24,12 @@ router.get('/', async (req, res) => {
     }
 });
 
-// 2. GET /:id - Récupérer un seul livre
+// GET /api/books/:id - Recuperer un seul livre
 router.get('/:id', async (req, res) => {
     try {
         const book = await Book.findById(req.params.id).populate('reviews.user', 'username');
-        if (book == null) {
-            return res.status(404).json({ message: 'Livre introuvable' });
+        if (!book) {
+            return res.status(404).json({ message: ERRORS.BOOK_NOT_FOUND });
         }
         res.json(book);
     } catch (err) {
@@ -34,26 +37,15 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// 3. POST - Ajouter un livre (SÉCURISÉ CONTRE XSS)
+// POST /api/books - Ajouter un livre (securise contre XSS)
 router.post('/', async (req, res) => {
-    
-    // --- 2. NETTOYAGE (Sanitization) ---
-    // On utilise la fonction xss() sur tous les champs texte.
-    // Elle va transformer "<script>" en "&lt;script&gt;" (texte inoffensif).
-    
-    const cleanTitle = xss(req.body.title);
-    const cleanAuthor = xss(req.body.author);
-    const cleanCategory = xss(req.body.category);
-    const cleanDescription = xss(req.body.description);
-    const cleanImage = xss(req.body.image);
-
     const book = new Book({
-        title: cleanTitle,
-        author: cleanAuthor,
-        price: req.body.price, // Le prix est un chiffre, pas besoin de le nettoyer
-        category: cleanCategory,
-        description: cleanDescription,
-        image: cleanImage
+        title: sanitize(req.body.title),
+        author: sanitize(req.body.author),
+        price: req.body.price,
+        category: sanitize(req.body.category),
+        description: sanitize(req.body.description),
+        image: sanitize(req.body.image)
     });
 
     try {
@@ -64,17 +56,14 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 4. POST /:id/reviews - Ajouter un avis
-const auth = require('../middleware/auth');
-const User = require('../models/User');
-
+// POST /api/books/:id/reviews - Ajouter un avis
 router.post('/:id/reviews', auth, async (req, res) => {
     const { rating, comment } = req.body;
 
     try {
         const book = await Book.findById(req.params.id);
         if (!book) {
-            return res.status(404).json({ message: 'Livre introuvable' });
+            return res.status(404).json({ message: ERRORS.BOOK_NOT_FOUND });
         }
 
         const alreadyReviewed = book.reviews.find(
@@ -82,18 +71,18 @@ router.post('/:id/reviews', auth, async (req, res) => {
         );
 
         if (alreadyReviewed) {
-            return res.status(400).json({ message: 'Vous avez déjà commenté ce livre' });
+            return res.status(400).json({ message: 'Vous avez deja commente ce livre' });
         }
 
         const user = await User.findById(req.user.id);
         if (!user) {
-            return res.status(404).json({ message: 'Utilisateur introuvable' });
+            return res.status(404).json({ message: ERRORS.USER_NOT_FOUND });
         }
 
         const review = {
-            name: user.username || 'Utilisateur',
+            name: sanitize(user.username) || 'Utilisateur',
             rating: Number(rating),
-            comment,
+            comment: sanitize(comment),
             user: req.user.id,
         };
 
@@ -102,15 +91,12 @@ router.post('/:id/reviews', auth, async (req, res) => {
         book.rating = book.reviews.reduce((acc, item) => item.rating + acc, 0) / book.reviews.length;
 
         await book.save();
-        
-        // On re-popule pour avoir le nom de l'utilisateur dans la réponse
+
         const populatedBook = await Book.findById(req.params.id).populate('reviews.user', 'username');
-        
         res.status(201).json(populatedBook);
     } catch (err) {
         res.status(500).json({ message: 'Erreur serveur: ' + err.message });
     }
 });
-
 
 module.exports = router;

@@ -4,33 +4,30 @@ const router = express.Router();
 const Payment = require('../models/Payment');
 const Order = require('../models/Order');
 const auth = require('../middleware/auth');
+const { ERRORS, isOwner } = require('../utils/helpers');
 
-// @route   POST /api/payments
-// @desc    Créer un paiement pour une commande
-// @access  Private
+// POST /api/payments - Creer un paiement pour une commande
 router.post('/', auth, async (req, res) => {
     const { orderId, paymentMethod, cardLast4 } = req.body;
 
     try {
-        // Vérifier que la commande existe
         const order = await Order.findById(orderId);
         if (!order) {
-            return res.status(404).json({ message: 'Commande introuvable' });
+            return res.status(404).json({ message: ERRORS.ORDER_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire de la commande
-        if (order.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(order.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
-        // Vérifier qu'il n'y a pas déjà un paiement complété pour cette commande
+        // Verifier qu'il n'y a pas deja un paiement complete
         const existingPayment = await Payment.findOne({ order: orderId, status: 'completed' });
         if (existingPayment) {
-            return res.status(400).json({ message: 'Cette commande a déjà été payée' });
+            return res.status(400).json({ message: ERRORS.ORDER_ALREADY_PAID });
         }
 
-        // Simuler le traitement du paiement (dans un vrai projet, intégrer Stripe/PayPal ici)
-        const paymentSuccess = true; // Simulation: toujours réussi
+        // Simuler le traitement du paiement
+        const paymentSuccess = true;
 
         const payment = new Payment({
             user: req.user.id,
@@ -47,7 +44,6 @@ router.post('/', auth, async (req, res) => {
 
         await payment.save();
 
-        // Mettre à jour la commande si le paiement est réussi
         if (paymentSuccess) {
             order.isPaid = true;
             order.paidAt = Date.now();
@@ -57,14 +53,11 @@ router.post('/', auth, async (req, res) => {
 
         res.status(201).json(payment);
     } catch (err) {
-        console.error(err);
         res.status(500).json({ message: 'Erreur lors du traitement du paiement: ' + err.message });
     }
 });
 
-// @route   GET /api/payments
-// @desc    Récupérer tous les paiements de l'utilisateur
-// @access  Private
+// GET /api/payments - Recuperer tous les paiements de l'utilisateur
 router.get('/', auth, async (req, res) => {
     try {
         const payments = await Payment.find({ user: req.user.id })
@@ -77,10 +70,7 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// @route   GET /api/payments/stats/summary
-// @desc    Obtenir un résumé des paiements de l'utilisateur
-// @access  Private
-// NOTE: Cette route doit être AVANT /:id pour éviter que "stats" soit interprété comme un ID
+// GET /api/payments/stats/summary - Resume des paiements
 router.get('/stats/summary', auth, async (req, res) => {
     try {
         const payments = await Payment.find({ user: req.user.id });
@@ -102,9 +92,7 @@ router.get('/stats/summary', auth, async (req, res) => {
     }
 });
 
-// @route   GET /api/payments/transaction/:transactionId
-// @desc    Récupérer un paiement par ID de transaction
-// @access  Private
+// GET /api/payments/transaction/:transactionId - Paiement par ID de transaction
 router.get('/transaction/:transactionId', auth, async (req, res) => {
     try {
         const payment = await Payment.findOne({ transactionId: req.params.transactionId })
@@ -114,9 +102,8 @@ router.get('/transaction/:transactionId', auth, async (req, res) => {
             return res.status(404).json({ message: 'Transaction introuvable' });
         }
 
-        // Vérifier que l'utilisateur est propriétaire du paiement
-        if (payment.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(payment.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
         res.json(payment);
@@ -125,21 +112,18 @@ router.get('/transaction/:transactionId', auth, async (req, res) => {
     }
 });
 
-// @route   GET /api/payments/:id
-// @desc    Récupérer un paiement par ID
-// @access  Private
+// GET /api/payments/:id - Paiement par ID
 router.get('/:id', auth, async (req, res) => {
     try {
         const payment = await Payment.findById(req.params.id)
             .populate('order', 'orderItems totalPrice shippingAddress status createdAt');
 
         if (!payment) {
-            return res.status(404).json({ message: 'Paiement introuvable' });
+            return res.status(404).json({ message: ERRORS.PAYMENT_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire du paiement
-        if (payment.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(payment.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
         res.json(payment);
@@ -148,9 +132,7 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// @route   POST /api/payments/:id/refund
-// @desc    Demander un remboursement
-// @access  Private
+// POST /api/payments/:id/refund - Demander un remboursement
 router.post('/:id/refund', auth, async (req, res) => {
     const { amount, reason } = req.body;
 
@@ -158,39 +140,34 @@ router.post('/:id/refund', auth, async (req, res) => {
         const payment = await Payment.findById(req.params.id);
 
         if (!payment) {
-            return res.status(404).json({ message: 'Paiement introuvable' });
+            return res.status(404).json({ message: ERRORS.PAYMENT_NOT_FOUND });
         }
 
-        // Vérifier que l'utilisateur est propriétaire du paiement
-        if (payment.user.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Accès non autorisé' });
+        if (!isOwner(payment.user, req.user.id)) {
+            return res.status(403).json({ message: ERRORS.ACCESS_DENIED });
         }
 
-        // Vérifier que le paiement peut être remboursé
         if (payment.status === 'refunded') {
-            return res.status(400).json({ message: 'Ce paiement a déjà été remboursé' });
+            return res.status(400).json({ message: ERRORS.PAYMENT_ALREADY_REFUNDED });
         }
 
         if (payment.status !== 'completed') {
-            return res.status(400).json({ message: 'Seuls les paiements complétés peuvent être remboursés' });
+            return res.status(400).json({ message: 'Seuls les paiements completes peuvent etre rembourses' });
         }
 
-        // Calculer le montant du remboursement
         const refundAmount = amount || payment.amount;
         const totalRefunded = payment.refundedAmount + refundAmount;
 
         if (totalRefunded > payment.amount) {
-            return res.status(400).json({ message: 'Le montant du remboursement dépasse le montant payé' });
+            return res.status(400).json({ message: ERRORS.REFUND_EXCEEDS_AMOUNT });
         }
 
-        // Simuler le remboursement
         payment.refundedAmount = totalRefunded;
-        payment.refundReason = reason || 'Remboursement demandé par le client';
+        payment.refundReason = reason || 'Remboursement demande par le client';
         payment.status = totalRefunded >= payment.amount ? 'refunded' : 'partially_refunded';
 
         await payment.save();
 
-        // Mettre à jour la commande si remboursement total
         if (payment.status === 'refunded') {
             const order = await Order.findById(payment.order);
             if (order) {
@@ -201,7 +178,7 @@ router.post('/:id/refund', auth, async (req, res) => {
         }
 
         res.json({
-            message: 'Remboursement effectué avec succès',
+            message: 'Remboursement effectue avec succes',
             payment,
             refundedAmount: refundAmount
         });
